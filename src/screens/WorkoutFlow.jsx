@@ -1,0 +1,351 @@
+import { useEffect, useRef, useState } from 'react'
+import { useStore } from '../lib/store.jsx'
+import { useNow, useWakeLock } from '../lib/hooks.js'
+import { cues, say, unlockAudio } from '../lib/audio.js'
+import { formatClock, formatDuration } from '../lib/dates.js'
+import {
+  NAG_EVERY_SEC, advance, autoAdvances, catchUp, currentStepDuration, dropLastSet, endEarly, extendStep, goBack,
+  lastDroppableSetIndex, lastPerformance, overrunSec, pace, pause, resume, shortenRests, stepElapsedSec, summarizeSets,
+} from '../lib/engine.js'
+import { getExercise, loadStep, usesLoad } from '../lib/exercises.js'
+import { Sheet, Stepper } from '../components/ui.jsx'
+import WorkoutSummary from './WorkoutSummary.jsx'
+
+const BEHIND_PROMPT_SEC = 180
+
+export default function WorkoutFlow({ onMinimize, onDone }) {
+  const { activeWorkout: w, set, records } = useStore()
+  const now = useNow(250, !!w && !w.finishedAt)
+  const fired = useRef(new Set())
+  const [menu, setMenu] = useState(false)
+  const [dismissedBehind, setDismissedBehind] = useState(0)
+  useWakeLock(!!w && !w.finishedAt)
+
+  const update = next => set({ activeWorkout: next })
+  const fire = (key, fn) => {
+    if (fired.current.has(key)) return
+    fired.current.add(key)
+    fn()
+  }
+
+  // Drive the clock: auto-advance rests/holds, and play cues.
+  useEffect(() => {
+    if (!w || w.pausedAt || w.finishedAt) return
+    const next = catchUp(w, now)
+    if (next !== w) {
+      const step = next.steps[next.index]
+      fire(`${step?.id ?? 'end'}:start`, () => {
+        if (!step) return cues.finish()
+        if (step.kind === 'rest' || step.kind === 'transition') return cues.done()
+        cues.go()
+        if (step.kind === 'set') say(`${step.label}. ${describeTarget(step.target)}`)
+        else say(step.label + (step.side ? `, ${step.side}` : ''))
+      })
+      update(next)
+      return
+    }
+    const step = w.steps[w.index]
+    if (!step) return
+    const total = currentStepDuration(w)
+    const remaining = total - stepElapsedSec(w, now)
+    if (autoAdvances(step)) {
+      if (step.kind !== 'timed' && total >= 30 && remaining <= 10 && remaining > 8) fire(`${step.id}:w10`, cues.warn)
+      for (const n of [3, 2, 1]) if (remaining <= n && remaining > n - 1) fire(`${step.id}:t${n}`, cues.tick)
+    } else if (step.kind === 'set') {
+      const over = overrunSec(w, now)
+      if (over > 0) fire(`${step.id}:nag${Math.floor(over / NAG_EVERY_SEC)}`, cues.nag)
+    } else if (step.kind === 'cardio' && remaining <= 0) {
+      fire(`${step.id}:end`, cues.done)
+    }
+  })
+
+  if (!w) return null
+  if (w.finishedAt) return <WorkoutSummary workout={w} onDone={onDone} />
+
+  const step = w.steps[w.index]
+  const p = pace(w, now)
+  const total = currentStepDuration(w)
+  const elapsed = stepElapsedSec(w, now)
+  const remaining = Math.max(0, total - elapsed)
+  const over = overrunSec(w, now)
+
+  const done = result => {
+    unlockAudio()
+    const next = advance(w, Date.now(), result)
+    const nextStep = next.steps[next.index]
+    if (!nextStep) cues.finish()
+    update(next)
+  }
+  const togglePause = () => update(w.pausedAt ? resume(w, Date.now()) : pause(w, Date.now()))
+
+  const blockCount = new Set(w.steps.map(s => s.blockId)).size
+  const behind = p.behindSec
+  const showBehind = behind > BEHIND_PROMPT_SEC && behind > dismissedBehind + 60 && !w.pausedAt
+  const canDrop = lastDroppableSetIndex(w) >= 0
+  const nextWork = w.steps.slice(w.index + 1).find(s => s.kind !== 'rest' && s.kind !== 'transition')
+
+  const tone = w.pausedAt ? '' : step.kind === 'set' && over > 0 ? 'over' : step.kind === 'rest' || step.kind === 'transition' ? 'rest' : step.kind === 'timed' ? 'timed' : ''
+
+  return (
+    <div className="fullscreen">
+      <div className={`fullscreen-inner flow ${tone}`}>
+        <div className="topbar" style={{ background: 'transparent', backdropFilter: 'none', WebkitBackdropFilter: 'none' }}>
+          <button className="icon-btn" onClick={onMinimize} aria-label="Minimize">⌄</button>
+          <div className="title">
+            <div className="tiny faint" style={{ letterSpacing: 1, textTransform: 'uppercase' }}>Block {step.blockIndex + 1} of {blockCount}</div>
+            <div className="ellipsis small">{w.name}</div>
+          </div>
+          <button className="icon-btn" onClick={() => setMenu(true)} aria-label="Workout menu">⋯</button>
+        </div>
+
+        <PaceBar p={p} pausedAt={w.pausedAt} />
+
+        {showBehind && (
+          <div style={{ padding: '6px var(--gutter) 0' }}>
+            <div className="callout bad stack tight">
+              <div className="small"><b>{Math.round(behind / 60)} min behind.</b> Fix it:</div>
+              <div className="row wrap">
+                <button className="btn small" onClick={() => update(shortenRests(w))}>Shorten rests 25%</button>
+                {canDrop && <button className="btn small" onClick={() => update(dropLastSet(w))}>Drop last set</button>}
+                <button className="btn small ghost" onClick={() => setDismissedBehind(behind)}>Ignore</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="flow-main">
+          {w.pausedAt ? (
+            <PausedView onResume={togglePause} pausedFor={(now - w.pausedAt) / 1000} />
+          ) : step.kind === 'set' ? (
+            <SetView key={step.id} w={w} step={step} elapsed={elapsed} over={over} records={records} onDone={done} />
+          ) : step.kind === 'rest' || step.kind === 'transition' ? (
+            <RestView step={step} remaining={remaining} total={total} next={nextWork} w={w} records={records}
+              onAdd={() => update(extendStep(w, 30))} onSkip={() => done({ skipped: true })} />
+          ) : step.kind === 'timed' ? (
+            <TimedView step={step} remaining={remaining} total={total} onSkip={() => done({ skipped: true })} />
+          ) : (
+            <CardioView key={step.id} step={step} label={w.session.blocks.find(b => b.id === step.blockId)?.label} elapsed={elapsed} total={total} onDone={done} />
+          )}
+        </div>
+        <div style={{ height: 'calc(var(--safe-bottom) + 16px)' }} />
+      </div>
+
+      <Sheet open={menu} onClose={() => setMenu(false)}>
+        <div className="stack">
+          <h2>Workout</h2>
+          <button className="btn block" onClick={() => { togglePause(); setMenu(false) }}>{w.pausedAt ? 'Resume' : 'Pause'}</button>
+          <button className="btn block" disabled={w.index === 0} onClick={() => { update(goBack(w, Date.now())); setMenu(false) }}>Back one step</button>
+          <button className="btn block" onClick={() => { update(shortenRests(w)); setMenu(false) }}>Shorten remaining rests 25%</button>
+          <button className="btn block" disabled={!canDrop} onClick={() => { update(dropLastSet(w)); setMenu(false) }}>Drop the last set</button>
+          <button className="btn danger block" onClick={() => { update(endEarly(w, Date.now())); setMenu(false) }}>End workout now</button>
+        </div>
+      </Sheet>
+    </div>
+  )
+}
+
+function describeTarget(t) {
+  if (!t) return ''
+  return `${t.reps} reps${t.load ? ` at ${t.load} kilos` : ''}`
+}
+
+function PaceBar({ p, pausedAt }) {
+  const b = p.behindSec
+  const status = Math.abs(b) < 60 ? ['On pace', 'ahead']
+    : b < 0 ? [`${Math.round(-b / 60)} min ahead`, 'ahead']
+      : [`${Math.round(b / 60)} min behind`, b > 300 ? 'way-behind' : 'behind']
+  return (
+    <div className="pace">
+      <div className="pace-track"><div className="pace-fill" style={{ width: `${Math.round(p.progress * 100)}%` }} /></div>
+      <div className="pace-line">
+        <span>{formatDuration(p.elapsedSec)}</span>
+        <span className={`pace-status ${pausedAt ? '' : status[1]}`}>{pausedAt ? 'Paused' : status[0]}</span>
+        <span>done ~{formatClock(p.projectedEndMs)}</span>
+      </div>
+    </div>
+  )
+}
+
+function SetDots({ step }) {
+  return (
+    <div className="set-dots" aria-label={`Set ${step.setNo} of ${step.setsTotal}`}>
+      {Array.from({ length: step.setsTotal }, (_, i) => (
+        <span key={i} className={i + 1 < step.setNo ? 'done' : i + 1 === step.setNo ? 'now' : ''} />
+      ))}
+    </div>
+  )
+}
+
+/** Value to pre-fill: what you just did this workout, else the target, else last time. */
+function initialValues(w, step, records) {
+  const earlier = w.steps.slice(0, w.index).reverse()
+    .find(s => s.kind === 'set' && s.exerciseId === step.exerciseId && !!s.warmup === !!step.warmup &&
+      w.results[s.id] && !w.results[s.id].skipped)
+  const prev = earlier && w.results[earlier.id]
+  const last = lastPerformance(step.exerciseId, records)
+  const targetReps = typeof step.target.reps === 'number' ? step.target.reps : parseInt(String(step.target.reps).match(/\d+/)?.[0] || '10', 10)
+  return {
+    reps: prev?.reps ?? targetReps,
+    load: prev?.load ?? step.target.load ?? (step.warmup ? null : last?.sets?.at(-1)?.load) ??
+      (getExercise(step.exerciseId).equipment.includes('barbell') ? 20 : 0),
+  }
+}
+
+function SetView({ w, step, elapsed, over, records, onDone }) {
+  const [vals, setVals] = useState(() => initialValues(w, step, records))
+  const weighted = usesLoad(step.exerciseId) || step.target.load
+  const last = lastPerformance(step.exerciseId, records)
+  const block = w.session.blocks.find(b => b.id === step.blockId)
+  const grouped = block && (block.type === 'superset' || block.type === 'circuit')
+  const kicker = step.warmup
+    ? `Warm-up ${step.setNo} of ${step.setsTotal}`
+    : grouped
+    ? `Round ${step.setNo} of ${step.setsTotal} · ${String.fromCharCode(65 + step.blockIndex % 26)}${step.exIndex + 1}`
+    : `Set ${step.setNo} of ${step.setsTotal}`
+
+  return (
+    <>
+      <div className="stack tight">
+        <div className="flow-kicker">{kicker}</div>
+        <div className="flow-name">{step.label}</div>
+        <div className="flow-target">
+          Target: <b style={{ color: 'var(--text)' }}>{step.target.reps} reps</b>
+          {step.target.load ? ` @ ${step.target.load} kg` : ''}{step.target.rpe ? ` · RPE ${step.target.rpe}` : ''}
+        </div>
+        {last && <div className="flow-last">Last time: {summarizeSets(last.sets)}</div>}
+        <SetDots step={step} />
+      </div>
+
+      <div className="log-grid">
+        <div className="stack tight" style={{ alignItems: 'center' }}>
+          <div className="field-label">Reps</div>
+          <Stepper big label="reps" value={vals.reps} min={0} max={100} onChange={reps => setVals({ ...vals, reps })} />
+        </div>
+        {weighted ? (
+          <div className="stack tight" style={{ alignItems: 'center' }}>
+            <div className="field-label">Load (kg)</div>
+            <Stepper big label="load" value={vals.load} min={0} max={500} step={loadStep(step.exerciseId)}
+              format={v => (v ? v : '—')} onChange={load => setVals({ ...vals, load })} />
+          </div>
+        ) : null}
+      </div>
+
+      <div className="stack tight">
+        {over > 0 ? (
+          <div className="flow-overline bad tnum">+{formatDuration(over)} over — finish the set</div>
+        ) : (
+          <div className="center small faint tnum">Set time {formatDuration(elapsed)} / {formatDuration(step.expectedSec)}</div>
+        )}
+        <button className="btn good block big" onClick={() => onDone({ reps: vals.reps, load: weighted ? vals.load || null : null })}>
+          Done ✓
+        </button>
+      </div>
+    </>
+  )
+}
+
+function Ring({ fraction, children, color = 'var(--info)' }) {
+  const r = 104
+  const c = 2 * Math.PI * r
+  return (
+    <div className="ring">
+      <svg viewBox="0 0 230 230" aria-hidden="true">
+        <circle cx="115" cy="115" r={r} stroke="var(--surface-3)" strokeWidth="10" fill="none" />
+        <circle cx="115" cy="115" r={r} stroke={color} strokeWidth="10" fill="none" strokeLinecap="round"
+          strokeDasharray={c} strokeDashoffset={c * (1 - Math.max(0, Math.min(1, fraction)))}
+          style={{ transition: 'stroke-dashoffset 0.25s linear' }} />
+      </svg>
+      <div className="inner">{children}</div>
+    </div>
+  )
+}
+
+function NextCard({ next, w, records }) {
+  if (!next) return <div className="flow-next center bold">Last one done after this. Finish strong.</div>
+  const last = next.kind === 'set' ? lastPerformance(next.exerciseId, records) : null
+  const block = w.session.blocks.find(b => b.id === next.blockId)
+  return (
+    <div className="flow-next">
+      <div className="eyebrow">Next</div>
+      <div className="bold" style={{ fontSize: 20 }}>{next.label}{next.side ? ` — ${next.side}` : ''}</div>
+      <div className="small muted">
+        {next.kind === 'set'
+          ? `${next.warmup ? `Warm-up ${next.setNo}/${next.setsTotal} · ` : block?.type === 'single' ? `Set ${next.setNo}/${next.setsTotal} · ` : ''}${next.target.reps} reps${next.target.load ? ` @ ${next.target.load} kg` : ''}`
+          : next.kind === 'cardio' ? `${Math.round(next.durationSec / 60)} min · ${next.target}`
+            : `${formatDuration(next.durationSec)} · ${next.target}`}
+      </div>
+      {last && <div className="tiny faint">Last time: {summarizeSets(last.sets)}</div>}
+    </div>
+  )
+}
+
+function RestView({ step, remaining, total, next, w, records, onAdd, onSkip }) {
+  const warn = remaining <= 10
+  return (
+    <>
+      <div className="flow-kicker">{step.kind === 'transition' ? 'Set up next station' : step.label === 'Switch' ? 'Switch' : 'Rest'}</div>
+      <Ring fraction={remaining / total} color={warn ? 'var(--warn)' : 'var(--info)'}>
+        <div className={`flow-timer small tnum${warn ? ' warn' : ''}`}>{formatDuration(Math.ceil(remaining))}</div>
+        <div className="tiny faint">of {formatDuration(total)}</div>
+      </Ring>
+      <NextCard next={next} w={w} records={records} />
+      <div className="row">
+        <button className="btn outline grow" onClick={onAdd}>+30s</button>
+        <button className="btn primary grow" onClick={onSkip}>Go now →</button>
+      </div>
+    </>
+  )
+}
+
+function TimedView({ step, remaining, total, onSkip }) {
+  return (
+    <>
+      <div className="stack tight">
+        <div className="flow-kicker">{step.setsTotal > 1 ? `Round ${step.setNo} of ${step.setsTotal}` : 'Hold'}{step.side ? ` · ${step.side}` : ''}</div>
+        <div className="flow-name">{step.label}</div>
+        <div className="flow-target">{step.target}</div>
+      </div>
+      <Ring fraction={remaining / total} color="var(--accent)">
+        <div className="flow-timer small tnum">{formatDuration(Math.ceil(remaining))}</div>
+      </Ring>
+      <button className="btn outline block" onClick={onSkip}>Skip</button>
+    </>
+  )
+}
+
+function CardioView({ step, label, elapsed, total, onDone }) {
+  const [distance, setDistance] = useState('')
+  const [hr, setHr] = useState('')
+  const left = total - elapsed
+  return (
+    <>
+      <div className="stack tight">
+        <div className="flow-kicker">{label || 'Cardio'} · {Math.round(total / 60)} min</div>
+        <div className="flow-name">{getExercise(step.exerciseId).name}</div>
+        {step.target && <div className="flow-target">{step.target}</div>}
+      </div>
+      <div className={`flow-timer tnum`} style={{ color: left <= 0 ? 'var(--good)' : undefined }}>
+        {left > 0 ? formatDuration(Math.ceil(left)) : `+${formatDuration(-left)}`}
+      </div>
+      <div className="center small faint">{left > 0 ? 'remaining' : 'Time\'s up — log it and move on'}</div>
+      <div className="row">
+        <input inputMode="decimal" placeholder="Distance km" value={distance} onChange={e => setDistance(e.target.value.replace(',', '.'))} />
+        <input inputMode="numeric" placeholder="Avg HR" value={hr} onChange={e => setHr(e.target.value)} />
+      </div>
+      <button className="btn good block big" onClick={() => onDone({ distanceKm: distance ? Number(distance) : null, avgHr: hr ? Number(hr) : null })}>
+        Done ✓
+      </button>
+    </>
+  )
+}
+
+function PausedView({ onResume, pausedFor }) {
+  return (
+    <>
+      <div className="flow-kicker">Paused</div>
+      <div className="flow-timer small tnum faint">{formatDuration(pausedFor)}</div>
+      <div className="center muted">The clock is stopped, but this shows up in your summary.</div>
+      <button className="btn primary block big" onClick={onResume}>Resume</button>
+    </>
+  )
+}
