@@ -14,7 +14,7 @@ Both sides MUST follow these formats. The app validates what it reads; anything 
 | `coach/brief.md`, `coach/principles.md`, `coach/notes.md` | Coach | Goals, training rules, coach memory. |
 | `coach/feed/*.md` | Coach | Messages, debriefs, reviews (append-only, `YYYY-MM-DD-HHMM-<slug>.md`). |
 | `environments.json` | App | Locations and their equipment. |
-| `exercises.json` | App | The exercise library: every valid `exerciseId`, its movement pattern and the equipment it needs. |
+| `exercises.json` | App | The exercise library: every valid `exerciseId`, its movement pattern and the equipment it needs. Equipment also listed in `optionalEquipment` is nice to have but not required. |
 | `SCHEMA.md` | App | This file. |
 | `logs/*.json` | App | Workouts, check-ins, reschedules. Append-only — never edit or delete. |
 | `inbox/*.json` | App | Messages and excuses for the coach. Coach answers in `coach/feed/`. |

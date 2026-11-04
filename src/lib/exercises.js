@@ -1,5 +1,6 @@
 // Exercise library. `pattern` drives swaps; `equipment` is what the exercise needs
-// (empty = bodyweight). The coach can reference any id here from plan/current.json.
+// (empty = bodyweight). Equipment also listed in `optionalEquipment` is nice to have but
+// never blocks the exercise. The coach can reference any id here from plan/current.json.
 
 export const EQUIPMENT = [
   { id: 'barbell', label: 'Barbell' },
@@ -27,6 +28,7 @@ export const EXERCISES = [
   ex('front-squat', 'Front squat', 'squat', ['barbell', 'rack'], 'strength', ['quads']),
   ex('goblet-squat', 'Goblet squat', 'squat', ['dumbbells'], 'strength', ['quads', 'glutes']),
   ex('kb-goblet-squat', 'Kettlebell goblet squat', 'squat', ['kettlebell'], 'strength', ['quads', 'glutes']),
+  ex('kb-front-squat', 'Kettlebell front squat', 'squat', ['kettlebell'], 'strength', ['quads', 'glutes']),
   ex('leg-press', 'Leg press', 'squat', ['machine'], 'strength', ['quads', 'glutes']),
   ex('band-squat', 'Banded squat', 'squat', ['bands'], 'strength', ['quads']),
   ex('air-squat', 'Air squat', 'squat', [], 'strength', ['quads']),
@@ -36,6 +38,7 @@ export const EXERCISES = [
   ex('rdl', 'Romanian deadlift', 'hinge', ['barbell'], 'strength', ['hamstrings', 'glutes']),
   ex('db-rdl', 'Dumbbell RDL', 'hinge', ['dumbbells'], 'strength', ['hamstrings', 'glutes']),
   ex('kb-swing', 'Kettlebell swing', 'hinge', ['kettlebell'], 'strength', ['glutes', 'hamstrings']),
+  ex('kb-rdl', 'Kettlebell Romanian deadlift', 'hinge', ['kettlebell'], 'strength', ['hamstrings', 'glutes']),
   ex('hip-thrust', 'Hip thrust', 'hinge', ['barbell', 'bench'], 'strength', ['glutes']),
   ex('band-good-morning', 'Banded good morning', 'hinge', ['bands'], 'strength', ['hamstrings']),
   ex('sl-rdl-bw', 'Single-leg RDL (bodyweight)', 'hinge', [], 'strength', ['hamstrings', 'glutes']),
@@ -43,6 +46,8 @@ export const EXERCISES = [
   // Lunge
   ex('bulgarian-split-squat', 'Bulgarian split squat', 'lunge', ['dumbbells', 'bench'], 'strength', ['quads', 'glutes']),
   ex('db-walking-lunge', 'Dumbbell walking lunge', 'lunge', ['dumbbells'], 'strength', ['quads', 'glutes']),
+  ex('kb-reverse-lunge', 'Kettlebell reverse lunge (goblet)', 'lunge', ['kettlebell'], 'strength', ['quads', 'glutes']),
+  ex('kb-bulgarian-split-squat', 'Kettlebell Bulgarian split squat', 'lunge', ['kettlebell'], 'strength', ['quads', 'glutes']),
   ex('step-up', 'Step-up', 'lunge', ['box'], 'strength', ['quads', 'glutes']),
   ex('reverse-lunge', 'Reverse lunge', 'lunge', [], 'strength', ['quads', 'glutes']),
   ex('split-squat-bw', 'Split squat (bodyweight)', 'lunge', [], 'strength', ['quads']),
@@ -52,31 +57,38 @@ export const EXERCISES = [
   ex('incline-db-press', 'Incline dumbbell press', 'h-push', ['dumbbells', 'bench'], 'strength', ['chest', 'shoulders']),
   ex('chest-press-machine', 'Chest press machine', 'h-push', ['machine'], 'strength', ['chest']),
   ex('band-chest-press', 'Banded chest press', 'h-push', ['bands'], 'strength', ['chest']),
+  ex('kb-floor-press', 'Kettlebell floor press', 'h-push', ['kettlebell'], 'strength', ['chest', 'triceps']),
   ex('push-up', 'Push-up', 'h-push', [], 'strength', ['chest', 'triceps']),
   ex('dip', 'Dip', 'h-push', [], 'strength', ['chest', 'triceps']),
   // Vertical push
   ex('overhead-press', 'Overhead press', 'v-push', ['barbell', 'rack'], 'strength', ['shoulders', 'triceps']),
   ex('db-shoulder-press', 'Dumbbell shoulder press', 'v-push', ['dumbbells'], 'strength', ['shoulders']),
+  ex('kb-half-kneeling-press', 'Half-kneeling kettlebell press', 'v-push', ['kettlebell'], 'strength', ['shoulders', 'triceps']),
   ex('band-overhead-press', 'Banded overhead press', 'v-push', ['bands'], 'strength', ['shoulders']),
   ex('pike-push-up', 'Pike push-up', 'v-push', [], 'strength', ['shoulders']),
   // Horizontal pull
   ex('barbell-row', 'Barbell row', 'h-pull', ['barbell'], 'strength', ['back']),
   ex('db-row', 'One-arm dumbbell row', 'h-pull', ['dumbbells'], 'strength', ['back']),
+  ex('kb-row', 'One-arm kettlebell row', 'h-pull', ['kettlebell'], 'strength', ['back', 'biceps']),
   ex('cable-row', 'Seated cable row', 'h-pull', ['cable'], 'strength', ['back']),
   ex('band-row', 'Banded row', 'h-pull', ['bands'], 'strength', ['back']),
   ex('inverted-row', 'Inverted row', 'h-pull', ['pullup-bar'], 'strength', ['back']),
+  ex('table-row', 'Table row (inverted)', 'h-pull', [], 'strength', ['back']),
   // Vertical pull
   ex('pull-up', 'Pull-up', 'v-pull', ['pullup-bar'], 'strength', ['back', 'biceps']),
   ex('chin-up', 'Chin-up', 'v-pull', ['pullup-bar'], 'strength', ['back', 'biceps']),
   ex('lat-pulldown', 'Lat pulldown', 'v-pull', ['cable'], 'strength', ['back']),
   ex('band-pulldown', 'Banded pulldown', 'v-pull', ['bands'], 'strength', ['back']),
+  ex('scap-pull-up', 'Scapular pull-up', 'v-pull', ['pullup-bar'], 'strength', ['back']),
   // Shoulders / arms
   ex('lateral-raise', 'Lateral raise', 'shoulder-iso', ['dumbbells'], 'strength', ['shoulders']),
   ex('band-lateral-raise', 'Banded lateral raise', 'shoulder-iso', ['bands'], 'strength', ['shoulders']),
   ex('face-pull', 'Face pull', 'rear-delt', ['cable'], 'strength', ['shoulders', 'back']),
   ex('band-pull-apart', 'Band pull-apart', 'rear-delt', ['bands'], 'strength', ['shoulders', 'back']),
+  ex('prone-ytw', 'Prone Y-T-W', 'rear-delt', [], 'mobility', ['shoulders', 'back']),
   ex('db-curl', 'Dumbbell curl', 'biceps', ['dumbbells'], 'strength', ['biceps']),
   ex('band-curl', 'Banded curl', 'biceps', ['bands'], 'strength', ['biceps']),
+  ex('kb-hammer-curl', 'Towel kettlebell hammer curl', 'biceps', ['kettlebell'], 'strength', ['biceps', 'grip']),
   ex('triceps-pushdown', 'Triceps pushdown', 'triceps', ['cable'], 'strength', ['triceps']),
   ex('db-overhead-extension', 'Dumbbell overhead extension', 'triceps', ['dumbbells'], 'strength', ['triceps']),
   ex('diamond-push-up', 'Diamond push-up', 'triceps', [], 'strength', ['triceps']),
@@ -86,6 +98,9 @@ export const EXERCISES = [
   // Core
   ex('hanging-knee-raise', 'Hanging knee raise', 'core', ['pullup-bar'], 'strength', ['core']),
   ex('dead-bug', 'Dead bug', 'core', [], 'strength', ['core']),
+  ex('bird-dog', 'Bird dog', 'core', [], 'strength', ['core']),
+  // Band adds resistance but the march works without one.
+  { ...ex('band-hip-flexor-march', 'Banded hip flexor march', 'core', ['bands'], 'strength', ['core']), optionalEquipment: ['bands'] },
   ex('ab-wheel', 'Ab wheel rollout', 'core', [], 'strength', ['core']),
   ex('plank', 'Plank', 'core-hold', [], 'mobility', ['core']),
   ex('side-plank', 'Side plank', 'core-hold', [], 'mobility', ['core']),
@@ -113,6 +128,9 @@ export const EXERCISES = [
   ex('hamstring-stretch', 'Hamstring stretch', 'mobility', [], 'mobility'),
   ex('dead-hang', 'Dead hang', 'mobility', ['pullup-bar'], 'mobility'),
   ex('childs-pose', "Child's pose", 'mobility', [], 'mobility'),
+  ex('hip-90-90', '90/90 hip switch', 'mobility', [], 'mobility'),
+  ex('leg-swing', 'Leg swings', 'mobility', [], 'mobility'),
+  ex('kb-halo', 'Kettlebell halo', 'mobility', ['kettlebell'], 'mobility', ['shoulders']),
 ]
 
 const BY_ID = new Map(EXERCISES.map(e => [e.id, e]))
@@ -126,14 +144,27 @@ function prettify(id) {
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
+/** Equipment the exercise can't be done without (`equipment` minus `optionalEquipment`). */
+export function requiredEquipment(exerciseId) {
+  const e = getExercise(exerciseId)
+  const optional = new Set(e.optionalEquipment || [])
+  return e.equipment.filter(q => !optional.has(q))
+}
+
 export function isAvailable(exercise, equipment) {
-  const have = new Set(equipment || [])
-  return getExercise(exercise.id || exercise).equipment.every(e => have.has(e))
+  return missingEquipment(exercise.id || exercise, equipment).length === 0
 }
 
 export function missingEquipment(exerciseId, equipment) {
   const have = new Set(equipment || [])
-  return getExercise(exerciseId).equipment.filter(e => !have.has(e))
+  return requiredEquipment(exerciseId).filter(e => !have.has(e))
+}
+
+/** "Kettlebell", "Bands (optional)", "Bodyweight" — for pickers. */
+export function equipmentSummary(exercise) {
+  const optional = new Set(exercise.optionalEquipment || [])
+  if (!exercise.equipment.length) return 'Bodyweight'
+  return exercise.equipment.map(q => equipmentLabel(q) + (optional.has(q) ? ' (optional)' : '')).join(', ')
 }
 
 export function equipmentLabel(id) {

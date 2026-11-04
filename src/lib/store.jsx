@@ -19,7 +19,7 @@ const PERSISTED = [
 ]
 
 // Bump when contract/SCHEMA.md or the exercise library changes, so the repo copy is refreshed.
-const CONTRACT_VERSION = 2
+const CONTRACT_VERSION = 3
 
 const DEFAULT_SETTINGS = { sound: true, voice: false, claudeProjectUrl: '' }
 

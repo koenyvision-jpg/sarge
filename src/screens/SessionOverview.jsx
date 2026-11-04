@@ -5,7 +5,7 @@ import { unlockAudio } from '../lib/audio.js'
 import { formatClock, formatDay, formatDuration, todayISO } from '../lib/dates.js'
 import { estimateByBlock, estimateSessionSec, lastPerformance, summarizeSets } from '../lib/engine.js'
 import {
-  EXERCISES, alternativesFor, equipmentLabel, getExercise, isAvailable, loadStep, missingEquipment, usesLoad,
+  EXERCISES, alternativesFor, equipmentLabel, equipmentSummary, getExercise, isAvailable, loadStep, missingEquipment, usesLoad,
 } from '../lib/exercises.js'
 import {
   adaptToEnvironment, addExerciseBlock, blockExercises, diffSession, moveBlock, removeBlock, removeExercise,
@@ -338,7 +338,7 @@ function SwapSheet({ swap, equipment, envName, onClose, onPick }) {
           <button key={e.id} className="list-row" onClick={() => onPick(e.id)}>
             <div className="grow">
               <div className="bold">{e.name}</div>
-              <div className="tiny faint">{e.equipment.length ? e.equipment.map(equipmentLabel).join(', ') : 'Bodyweight'}</div>
+              <div className="tiny faint">{equipmentSummary(e)}</div>
             </div>
           </button>
         ))}
