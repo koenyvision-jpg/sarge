@@ -14,6 +14,8 @@ Both sides MUST follow these formats. The app validates what it reads; anything 
 | `coach/brief.md`, `coach/principles.md`, `coach/notes.md` | Coach | Goals, training rules, coach memory. |
 | `coach/feed/*.md` | Coach | Messages, debriefs, reviews (append-only, `YYYY-MM-DD-HHMM-<slug>.md`). |
 | `environments.json` | App | Locations and their equipment. |
+| `exercises.json` | App | The exercise library: every valid `exerciseId`, its movement pattern and the equipment it needs. |
+| `SCHEMA.md` | App | This file. |
 | `logs/*.json` | App | Workouts, check-ins, reschedules. Append-only — never edit or delete. |
 | `inbox/*.json` | App | Messages and excuses for the coach. Coach answers in `coach/feed/`. |
 
@@ -51,8 +53,7 @@ Both sides MUST follow these formats. The app validates what it reads; anything 
 
 ### Block types
 
-`exerciseId` must be an id from the app's exercise library (`src/lib/exercises.js` in the app repo,
-e.g. `back-squat`, `rdl`, `bench-press`, `pull-up`, `db-row`, `push-up`, `run`, `row-erg`, `couch-stretch`).
+`exerciseId` must be an id from `exercises.json` in this repo (e.g. `back-squat`, `rdl`, `bench-press`, `pull-up`, `db-row`, `push-up`, `run`, `row-erg`, `couch-stretch`).
 Unknown ids still work but show a generated name and can't be swapped.
 
 **single** — straight sets of one exercise

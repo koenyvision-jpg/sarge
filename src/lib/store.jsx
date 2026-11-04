@@ -11,11 +11,15 @@ import { recordPath } from './schedule.js'
 import { todayISO } from './dates.js'
 import { configureCues } from './audio.js'
 import SCHEMA_MD from '../../contract/SCHEMA.md?raw'
+import { EQUIPMENT, EXERCISES } from './exercises.js'
 
 const PERSISTED = [
   'plan', 'planSha', 'records', 'environments', 'activeEnvId', 'settings',
-  'github', 'activeWorkout', 'syncQueue', 'syncStatus', 'coachToday',
+  'github', 'activeWorkout', 'syncQueue', 'syncStatus', 'coachToday', 'contractVersion',
 ]
+
+// Bump when contract/SCHEMA.md or the exercise library changes, so the repo copy is refreshed.
+const CONTRACT_VERSION = 2
 
 const DEFAULT_SETTINGS = { sound: true, voice: false, claudeProjectUrl: '' }
 
@@ -103,7 +107,13 @@ export function StoreProvider({ children }) {
         set(prev => ({ syncQueue: prev.syncQueue.filter(q => !(q.path === item.path && q.text === item.text)) }))
       }
       if (pull) {
-        // 2. Pull the coach's plan and today's orders.
+        // 2. Keep the coach's copy of the data contract and exercise library current.
+        if (ref.current.contractVersion !== CONTRACT_VERSION) {
+          await writeFile(cfg, 'SCHEMA.md', SCHEMA_MD, 'Sarge: update data contract')
+          await writeFile(cfg, 'exercises.json', json({ equipment: EQUIPMENT, exercises: EXERCISES }), 'Sarge: update exercise library')
+          set({ contractVersion: CONTRACT_VERSION })
+        }
+        // 3. Pull the coach's plan and today's orders.
         const plan = await getFile(cfg, 'plan/current.json')
         const remote = plan ? JSON.parse(plan.text) : null
         if (remote && !Array.isArray(remote.sessions)) throw new Error('plan/current.json has no sessions array')
@@ -180,11 +190,11 @@ export function StoreProvider({ children }) {
       set(prev => ({ github: { ...prev.github, ...github } }))
     },
 
-    /** First-time repo setup: contract docs + environments, without touching existing files. */
+    /** First-time repo setup: environments + contract docs, without touching the coach's files. */
     async bootstrapRepo() {
       const cfg = ref.current.github
       const existing = new Set((await listDir(cfg, '')).map(f => f.path))
-      if (!existing.has('SCHEMA.md')) await writeFile(cfg, 'SCHEMA.md', SCHEMA_MD, 'Sarge: add data contract')
+      set({ contractVersion: null }) // syncNow (below) writes SCHEMA.md + exercises.json
       if (!existing.has('environments.json')) {
         await writeFile(cfg, 'environments.json', json(ref.current.environments), 'Sarge: add environments')
       }
