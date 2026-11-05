@@ -7,7 +7,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { idbGet, idbSet, idbClear, requestPersistence } from './idb.js'
 import { getFile, listDir, writeFile, isConfigured } from './github.js'
 import { buildSamplePlan, DEFAULT_ENVIRONMENTS, sampleIsStale } from './samplePlan.js'
-import { recordPath } from './schedule.js'
+import { detectMisses, missedRecord, recordPath } from './schedule.js'
 import { todayISO } from './dates.js'
 import { configureCues } from './audio.js'
 import SCHEMA_MD from '../../contract/SCHEMA.md?raw'
@@ -19,7 +19,7 @@ const PERSISTED = [
 ]
 
 // Bump when contract/SCHEMA.md or the exercise library changes, so the repo copy is refreshed.
-const CONTRACT_VERSION = 4
+const CONTRACT_VERSION = 5
 
 const DEFAULT_SETTINGS = { sound: true, voice: false, claudeProjectUrl: '' }
 
@@ -36,6 +36,7 @@ const INITIAL = {
   syncQueue: [],
   syncStatus: { lastSyncAt: null, lastError: null, syncing: false },
   coachToday: null,
+  lastPullAt: null, // not persisted: set after each successful pull of the coach's plan
 }
 
 const SYNC_DEBOUNCE_MS = 2500
@@ -129,7 +130,7 @@ export function StoreProvider({ children }) {
           set({ planSha: sha })
         }
         const today = await getFile(cfg, 'coach/today.md')
-        set({ coachToday: today ? { text: today.text, sha: today.sha } : null })
+        set({ coachToday: today ? { text: today.text, sha: today.sha } : null, lastPullAt: Date.now() })
       }
       setSyncStatus({ lastSyncAt: Date.now(), lastError: null })
     } catch (err) {
@@ -234,6 +235,17 @@ export function StoreProvider({ children }) {
       set({ ...INITIAL, plan: buildSamplePlan(todayISO()), loaded: true })
     },
   }), [set, syncNow, enqueue])
+
+  // Log missed sessions once we know the plan is the coach's latest. Checking against a stale local
+  // copy could flag a session the coach has already shifted forward.
+  useEffect(() => {
+    if (!state.lastPullAt) return
+    const today = todayISO()
+    const now = Date.now()
+    for (const s of detectMisses(ref.current.plan, ref.current.records, today)) {
+      actions.addRecord(missedRecord(s, today, now), `Sarge: missed ${s.name} (${s.date})`)
+    }
+  }, [state.lastPullAt, actions])
 
   const value = useMemo(() => ({ ...state, ...actions }), [state, actions])
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>

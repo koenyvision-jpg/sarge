@@ -367,6 +367,7 @@ button.list-row:active { background: var(--surface-2); }
 .heat span { aspect-ratio: 1; border-radius: 4px; background: var(--surface-3); }
 .heat span.c1 { background: rgba(255, 122, 26, 0.55); }
 .heat span.c2 { background: var(--accent); }
+.heat span.miss { background: color-mix(in srgb, var(--bad) 60%, transparent); }
 .heat span.future { background: transparent; border: 1px dashed var(--surface-3); }
 .heat span.today { outline: 2px solid var(--text-2); outline-offset: 1px; }
 

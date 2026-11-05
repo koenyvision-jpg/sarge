@@ -74,7 +74,7 @@ export default function CoachPage({ onGoSettings }) {
             <div className="grow">
               <div className="small">
                 {r.type === 'excuse'
-                  ? <><b>{sessionName(r.sessionId)}</b> ({formatDay(r.sessionDate, today)}): {EXCUSES.find(e => e[0] === r.category)?.[1]}{r.text ? ` — ${r.text}` : ''}</>
+                  ? <><b>{r.sessionName || sessionName(r.sessionId)}</b> ({formatDay(r.sessionDate, today)}): {EXCUSES.find(e => e[0] === r.category)?.[1]}{r.text ? ` — ${r.text}` : ''}</>
                   : r.text}
               </div>
               <div className="tiny faint">{formatDay(r.date, today)} · {queued.has(recordPath(r)) ? 'waiting to sync' : connected ? 'delivered' : 'on this phone only'}</div>

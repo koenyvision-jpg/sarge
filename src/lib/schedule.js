@@ -10,39 +10,55 @@ export function recordPath(rec) {
   switch (rec.type) {
     case 'workout': return `logs/${rec.date}-workout-${rec.id}.json`
     case 'checkin': return `logs/${rec.date}-checkin.json`
-    case 'reschedule': return `logs/${rec.date}-reschedule-${rec.id}.json`
+    case 'missed': return `logs/${rec.date}-missed-${rec.sessionId}.json`
+    case 'reschedule': return `logs/${rec.date}-reschedule-${rec.id}.json` // legacy, no longer written
     case 'excuse': return `inbox/${stamp(rec.createdAt)}-excuse-${rec.id}.json`
     case 'message': return `inbox/${stamp(rec.createdAt)}-message-${rec.id}.json`
     default: return `logs/${rec.date}-${rec.type}-${rec.id}.json`
   }
 }
 
-/** Latest reschedule per session id. */
-function overrides(records) {
+const keyOf = (sessionId, date) => `${sessionId}|${date}`
+
+/**
+ * Legacy: the app used to let the user move sessions (logs/*-reschedule-*.json). The coach owns the
+ * schedule now, so an old move only still applies while the plan has that session on the date it
+ * was originally moved away from. Once the coach has rewritten the plan, the plan wins.
+ */
+function legacyMoves(plan, records) {
+  const bySession = {}
+  for (const r of records) if (r.type === 'reschedule' && r.sessionId) (bySession[r.sessionId] ||= []).push(r)
   const out = {}
-  for (const r of records) {
-    if (r.type !== 'reschedule') continue
-    if (!out[r.sessionId] || r.createdAt > out[r.sessionId].createdAt) out[r.sessionId] = r
+  for (const s of plan.sessions) {
+    const list = bySession[s.id]?.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))
+    if (!list) continue
+    const first = list[0], latest = list[list.length - 1]
+    if (!first.fromDate || first.fromDate === s.date) out[s.id] = latest
   }
   return out
 }
 
-/** Plan sessions with reschedules applied and a status for each. Sorted by date. */
+/**
+ * Plan sessions with a status each. Sorted by date.
+ * A date with no session is a rest day. Workouts count by sessionId (doing a session early or late
+ * still counts); an excuse only covers the session on the date it was given for, because the coach
+ * may shift a skipped session forward under the same id.
+ */
 export function scheduledSessions(plan, records, today) {
   if (!plan?.sessions) return []
-  const moved = overrides(records)
+  const moved = legacyMoves(plan, records)
   const doneBy = new Map()
-  const excusedBy = new Map()
+  const excuses = new Map()
   for (const r of records) {
     if (r.type === 'workout' && r.sessionId) doneBy.set(r.sessionId, r)
-    if (r.type === 'excuse' && r.sessionId) excusedBy.set(r.sessionId, r)
+    if (r.type === 'excuse' && r.sessionId) excuses.set(keyOf(r.sessionId, r.sessionDate), r)
   }
   return plan.sessions
     .map(s => {
       const o = moved[s.id]
       const date = o?.toDate || s.date
       const workout = doneBy.get(s.id)
-      const excuse = excusedBy.get(s.id)
+      const excuse = excuses.get(keyOf(s.id, date)) || excuses.get(keyOf(s.id, undefined))
       let status
       if (workout) status = 'done'
       else if (excuse) status = 'excused'
@@ -51,18 +67,74 @@ export function scheduledSessions(plan, records, today) {
       else status = 'upcoming'
       return { ...s, date, time: o?.toTime || s.time, originalDate: s.date, moved: !!o, status, workout, excuse }
     })
-    .sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')))
+    .sort(byDate)
+}
+
+const byDate = (a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || ''))
+
+/**
+ * Plan sessions plus the misses and skips that no longer have a session on their date
+ * (the coach shifted the plan after them). Those come back as `ghost` entries so they keep
+ * counting in history and compliance instead of looking like rest days.
+ */
+export function timeline(sessions, records, plan) {
+  const nameOf = id => plan?.sessions?.find(s => s.id === id)?.name
+  const taken = new Set(sessions.map(s => keyOf(s.id, s.date)))
+  const excuses = new Map()
+  for (const r of records) if (r.type === 'excuse' && r.sessionId && r.sessionDate) excuses.set(keyOf(r.sessionId, r.sessionDate), r)
+  const ghosts = []
+  const add = (r, status) => {
+    if (!r.sessionId || !r.sessionDate) return
+    const k = keyOf(r.sessionId, r.sessionDate)
+    if (taken.has(k)) return
+    taken.add(k)
+    ghosts.push({
+      id: r.sessionId, date: r.sessionDate, name: r.sessionName || nameOf(r.sessionId) || 'Session',
+      status, ghost: true, excuse: excuses.get(k) || null, blocks: [],
+    })
+  }
+  for (const r of records) if (r.type === 'missed') add(r, 'missed')
+  for (const r of records) if (r.type === 'excuse') add(r, 'excused')
+  return ghosts.length ? [...sessions, ...ghosts].sort(byDate) : sessions
 }
 
 export function sessionsOn(sessions, date) {
   return sessions.filter(s => s.date === date)
 }
 
-/** Missed sessions in the last 14 days that you haven't explained yet. */
-export function unexplainedMisses(sessions, today) {
-  return sessions.filter(s => s.status === 'missed' && daysBetween(s.date, today) <= 14)
+/**
+ * Sessions to log as missed now: in the plan, dated before today, no workout and no excuse,
+ * and not logged as missed before. Only for dates this device has data for (its oldest record),
+ * so a freshly connected phone doesn't flag sessions it simply hasn't restored yet.
+ */
+export function detectMisses(plan, records, today) {
+  if (!plan?.sessions || plan.sample) return []
+  let since = null
+  for (const r of records) if (r.date && (!since || r.date < since)) since = r.date
+  if (!since) return []
+  const logged = new Set(records.filter(r => r.type === 'missed').map(r => r.sessionId))
+  return scheduledSessions(plan, records, today)
+    .filter(s => s.status === 'missed' && s.date >= since && !logged.has(s.id))
 }
 
+export function missedRecord(session, today, now) {
+  return {
+    type: 'missed', id: `missed-${session.id}`, sessionId: session.id, sessionName: session.name,
+    sessionDate: session.date, date: today, createdAt: now,
+  }
+}
+
+/** Logged misses from the last 14 days that you haven't explained yet (oldest first). */
+export function unexplainedMisses(records, today) {
+  const explained = new Set(records.filter(r => r.type === 'excuse').map(r => keyOf(r.sessionId, r.sessionDate)))
+  return records
+    .filter(r => r.type === 'missed' && r.sessionDate < today && daysBetween(r.sessionDate, today) <= 14
+      && !explained.has(keyOf(r.sessionId, r.sessionDate)))
+    .map(r => ({ id: r.sessionId, name: r.sessionName || 'Session', date: r.sessionDate }))
+    .sort(byDate)
+}
+
+/** Streak and compliance over `timeline(...)` (plan sessions + misses the plan no longer shows). */
 export function accountability(sessions, plan, today) {
   // Streak: consecutive completed sessions, newest first. Today only counts once done.
   let streak = 0
@@ -113,15 +185,45 @@ export function workouts(records) {
   return records.filter(r => r.type === 'workout').sort((a, b) => b.startedAt - a.startedAt)
 }
 
-/** Count of workouts per day for the last `weeks` weeks (Monday-aligned). */
-export function heatmap(records, today, weeks = 12) {
+/**
+ * Everything that happened, newest first: workouts (from the log itself, so they show even when the
+ * session is gone from the plan), misses and skips on the date they were planned for, and old moves.
+ */
+export function history(records, plan) {
+  const nameOf = id => plan?.sessions?.find(s => s.id === id)?.name
+  const excuses = new Map()
+  const missed = new Set()
+  const doneOn = new Set()
+  for (const r of records) {
+    if (r.type === 'excuse' && r.sessionId) excuses.set(keyOf(r.sessionId, r.sessionDate), r)
+    if (r.type === 'missed') missed.add(keyOf(r.sessionId, r.sessionDate))
+    if (r.type === 'workout') doneOn.add(keyOf(r.sessionId, r.date))
+  }
+  const out = []
+  for (const r of records) {
+    const k = keyOf(r.sessionId, r.sessionDate)
+    if (r.type === 'workout') out.push({ kind: 'workout', key: r.id, date: r.date, at: r.startedAt || 0, workout: r })
+    else if (r.type === 'missed') {
+      out.push({ kind: 'missed', key: r.id, date: r.sessionDate, at: 0, name: r.sessionName || nameOf(r.sessionId) || 'Session', excuse: excuses.get(k) || null })
+    } else if (r.type === 'excuse' && r.sessionId && r.sessionDate && !missed.has(k) && !doneOn.has(k)) {
+      out.push({ kind: 'excused', key: r.id, date: r.sessionDate, at: 0, name: r.sessionName || nameOf(r.sessionId) || 'Session', excuse: r })
+    } else if (r.type === 'reschedule') {
+      out.push({ kind: 'moved', key: r.id, date: r.date, at: r.createdAt || 0, name: nameOf(r.sessionId) || 'Session', from: r.fromDate, to: r.toDate })
+    }
+  }
+  return out.sort((a, b) => b.date.localeCompare(a.date) || b.at - a.at)
+}
+
+/** Workouts per day for the last `weeks` weeks (Monday-aligned), plus days with a missed session. */
+export function heatmap(records, today, weeks = 12, events = []) {
   const start = addDays(startOfWeek(today), -7 * (weeks - 1))
   const counts = {}
   for (const r of records) if (r.type === 'workout' && r.date >= start) counts[r.date] = (counts[r.date] || 0) + 1
+  const missed = new Set(events.filter(e => e.status === 'missed').map(e => e.date))
   const days = []
   for (let i = 0; i < weeks * 7; i++) {
     const d = addDays(start, i)
-    days.push({ date: d, count: counts[d] || 0, future: d > today })
+    days.push({ date: d, count: counts[d] || 0, missed: missed.has(d), future: d > today })
   }
   return days
 }

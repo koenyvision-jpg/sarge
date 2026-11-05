@@ -40,7 +40,7 @@ The app then writes the following to `trainer-data`:
 - `SCHEMA.md`: the data contract between the app and the coach (source: [contract/SCHEMA.md](contract/SCHEMA.md))
 - `environments.json`
 - `plan/current.json`: the starter block, only if no plan exists yet
-- your workouts, check-ins and reschedules under `logs/`
+- your workouts, check-ins and missed sessions under `logs/`
 - your messages and excuses under `inbox/`
 
 The coach (phase 3) reads these files and writes `plan/current.json` and `coach/today.md` back.

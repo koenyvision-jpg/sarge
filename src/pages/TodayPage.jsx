@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useStore } from '../lib/store.jsx'
-import { accountability, checkinFor, fallbackOrders, scheduledSessions, unexplainedMisses } from '../lib/schedule.js'
+import { accountability, checkinFor, fallbackOrders, scheduledSessions, timeline, unexplainedMisses } from '../lib/schedule.js'
+import { excuseLabel } from '../lib/excuses.js'
 import { addDays, formatDay, formatDuration, formatMinutes, parseISODate, todayISO } from '../lib/dates.js'
 import { blockTitle, estimateSessionSec } from '../lib/engine.js'
 import { CantTodaySheet, CheckInCard, ExplainYourself } from '../components/Accountability.jsx'
@@ -10,13 +11,14 @@ export default function TodayPage({ onOpenSession, onResume }) {
   const [cantFor, setCantFor] = useState(null)
   const today = todayISO()
   const sessions = scheduledSessions(plan, records, today)
-  const todays = sessions.filter(s => s.date === today)
-  const stats = accountability(sessions, plan, today)
+  const events = timeline(sessions, records, plan)
+  const todays = events.filter(s => s.date === today)
+  const stats = accountability(events, plan, today)
   const checkin = checkinFor(records, today)
-  const missed = unexplainedMisses(sessions, today)
+  const missed = unexplainedMisses(records, today)
   const upcoming = sessions.filter(s => s.date > today && s.date <= addDays(today, 3))
   const envName = id => environments.find(e => e.id === id)?.name || id
-  const orders = coachToday?.text?.trim() || fallbackOrders({ todaySessions: todays, sessions, today, checkedIn: !!checkin })
+  const orders = coachToday?.text?.trim() || fallbackOrders({ todaySessions: todays, sessions: events, today, checkedIn: !!checkin })
 
   return (
     <div className="page">
@@ -120,7 +122,7 @@ function SessionCard({ session: s, envName, onOpen, onCant, hideActions }) {
           <div className="bold" style={{ fontSize: 19 }}>{s.name}</div>
           <span className="badge warn">Skipped</span>
         </div>
-        <div className="small muted">Excuse logged: {s.excuse.category}{s.excuse.text ? ` — ${s.excuse.text}` : ''}</div>
+        <div className="small muted">Excuse logged: {excuseLabel(s.excuse)}</div>
       </div>
     )
   }

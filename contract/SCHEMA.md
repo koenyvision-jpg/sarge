@@ -16,8 +16,16 @@ Both sides MUST follow these formats. The app validates what it reads; anything 
 | `environments.json` | App | Locations and their equipment. |
 | `exercises.json` | App | The exercise library: every valid `exerciseId`, its movement pattern and the equipment it needs. Equipment also listed in `optionalEquipment` is nice to have but not required. |
 | `SCHEMA.md` | App | This file. |
-| `logs/*.json` | App | Workouts, check-ins, reschedules. Append-only — never edit or delete. |
+| `logs/*.json` | App | Workouts, check-ins, missed sessions (plus old reschedules). Append-only — never edit or delete. |
 | `inbox/*.json` | App | Messages and excuses for the coach. Coach answers in `coach/feed/`. |
+
+## Scheduling — the coach owns it
+
+The user never moves sessions in the app. All scheduling happens by rewriting `plan/current.json`.
+- Plans are order-based. When the user skips a session, shift the remaining sessions forward and **keep their ids**.
+- A date with no session is a **planned rest day**. It never counts as missed.
+- Misses are recorded in `logs/` (see `missed` below), so they survive plan rewrites. Read them, don't infer misses from gaps.
+- The app picks up a new plan the next time it's opened.
 
 ## plan/current.json
 
@@ -133,8 +141,18 @@ Patterns in adjustments (always cutting the same set, always swapping the same l
   "sleep": 4, "energy": 3, "soreness": 2, "stress": 3, "bodyweight": 82.4, "createdAt": 1760252400000 }
 ```
 
-`logs/YYYY-MM-DD-reschedule-<id>.json` — the user moved a session (the app applies this on top of the plan;
-fold it into `plan/current.json` next time you rewrite the plan)
+`logs/YYYY-MM-DD-missed-<sessionId>.json` — a planned session that didn't happen. The app writes it once, on the
+first launch after the session's date, when the plan still has the session on that date and there is no workout and
+no excuse for it. `date` is when the app noticed; `sessionDate` is the day it was planned for. At most one per
+`sessionId`. If the user explains it later, an excuse with `"when": "after"` and the same `sessionId` + `sessionDate`
+lands in `inbox/`.
+```json
+{ "type": "missed", "id": "missed-s-2026-10-14", "sessionId": "s-2026-10-14", "sessionName": "Engine",
+  "sessionDate": "2026-10-14", "date": "2026-10-15", "createdAt": 1760511600000 }
+```
+
+`logs/YYYY-MM-DD-reschedule-<id>.json` — **legacy, no longer written.** Older versions let the user move sessions.
+These files stay for history; the plan's own dates win.
 ```json
 { "type": "reschedule", "id": "…", "sessionId": "s-2026-10-14", "fromDate": "2026-10-14", "toDate": "2026-10-15",
   "reason": "Work dinner", "date": "2026-10-13", "createdAt": 1760338800000 }
@@ -144,11 +162,13 @@ fold it into `plan/current.json` next time you rewrite the plan)
 
 `inbox/<UTC timestamp>-excuse-<id>.json`
 ```json
-{ "type": "excuse", "id": "…", "sessionId": "s-2026-10-13", "sessionDate": "2026-10-13",
+{ "type": "excuse", "id": "…", "sessionId": "s-2026-10-13", "sessionName": "Upper Strength", "sessionDate": "2026-10-13",
   "when": "ahead",          // "ahead" = called off in advance, "after" = explained after missing it
   "category": "tired",      // tired | no-time | sick | injured | travel | skipped | other
   "text": "Slept 4 hours", "date": "2026-10-13", "createdAt": 1760360000000 }
 ```
+An excuse covers the session on `sessionDate` only. "ahead" means: skip it — shift the plan. A skipped session you move
+forward under the same id is live again on its new date.
 
 `inbox/<UTC timestamp>-message-<id>.json`
 ```json

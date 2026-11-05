@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useStore } from './lib/store.jsx'
 import { startWorkout } from './lib/engine.js'
-import { scheduledSessions, unexplainedMisses } from './lib/schedule.js'
+import { unexplainedMisses } from './lib/schedule.js'
 import { todayISO } from './lib/dates.js'
 import { BottomNav, ToastHost } from './components/ui.jsx'
 import TodayPage from './pages/TodayPage.jsx'
@@ -13,7 +13,7 @@ import SessionOverview from './screens/SessionOverview.jsx'
 import WorkoutFlow from './screens/WorkoutFlow.jsx'
 
 export default function App() {
-  const { loaded, activeWorkout, set, plan, records } = useStore()
+  const { loaded, activeWorkout, set, records } = useStore()
   const [tab, setTab] = useState('today')
   const [overview, setOverview] = useState(null)
   const [flowOpen, setFlowOpen] = useState(true)
@@ -37,7 +37,7 @@ export default function App() {
   }
 
   const today = todayISO()
-  const pips = { today: unexplainedMisses(scheduledSessions(plan, records, today), today).length > 0 }
+  const pips = { today: unexplainedMisses(records, today).length > 0 }
 
   return (
     <>

@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { useStore } from '../lib/store.jsx'
-import { scheduledSessions } from '../lib/schedule.js'
+import { scheduledSessions, timeline } from '../lib/schedule.js'
 import { addDays, formatDay, parseISODate, startOfWeek, todayISO } from '../lib/dates.js'
 import { estimateSessionSec } from '../lib/engine.js'
 import { EQUIPMENT } from '../lib/exercises.js'
-import { CantTodaySheet } from '../components/Accountability.jsx'
+import { excuseLabel } from '../lib/excuses.js'
 
 const STATUS_BADGE = {
   done: ['good', 'Done'],
@@ -16,10 +16,11 @@ const STATUS_BADGE = {
 export default function PlanPage({ onOpenSession }) {
   const { plan, records, environments, setEnvironments } = useStore()
   const [showPast, setShowPast] = useState(false)
-  const [moving, setMoving] = useState(null)
   const [editEnv, setEditEnv] = useState(null)
   const today = todayISO()
-  const sessions = scheduledSessions(plan, records, today)
+  // Plan sessions plus misses/skips the coach has since shifted away, so a missed day doesn't read as rest.
+  const sessions = plan ? timeline(scheduledSessions(plan, records, today), records, plan)
+    .filter(s => !s.ghost || (s.date >= plan.startDate && s.date <= plan.endDate)) : []
   const envName = id => environments.find(e => e.id === id)?.name || id
 
   const weeks = []
@@ -67,28 +68,37 @@ export default function PlanPage({ onOpenSession }) {
           <div className="list">
             {w.sessions.map(s => {
               const badge = STATUS_BADGE[s.status]
-              return (
-                <div key={s.id} className="list-row" style={{ padding: 0 }}>
-                  <button className="row grow" style={{ padding: '13px 0 13px 14px', textAlign: 'left', gap: 12 }} onClick={() => onOpenSession(s)}>
+              if (s.ghost) {
+                return (
+                  <div key={`${s.id}|${s.date}`} className="list-row">
                     <span className={`dot ${s.status}`} />
                     <div className="grow">
                       <div className="row" style={{ gap: 6 }}>
-                        <span className="bold ellipsis">{s.name}</span>
+                        <span className="bold ellipsis muted">{s.name}</span>
                         {badge && <span className={`badge ${badge[0]}`}>{badge[1]}</span>}
-                        {s.moved && <span className="badge">Moved</span>}
                       </div>
-                      <div className="small muted">
-                        {formatDay(s.date, today)} · {envName(s.environment)} · {s.targetDurationMin || Math.round(estimateSessionSec(s) / 60)} min
-                      </div>
+                      <div className="small muted ellipsis">{formatDay(s.date, today)}{s.excuse ? ` · ${excuseLabel(s.excuse)}` : ''}</div>
                     </div>
-                  </button>
-                  {(s.status === 'upcoming' || s.status === 'today') && (
-                    <button className="btn small ghost" style={{ marginRight: 6 }} onClick={() => setMoving(s)}>Move</button>
-                  )}
-                </div>
+                  </div>
+                )
+              }
+              return (
+                <button key={s.id} className="list-row" onClick={() => onOpenSession(s)}>
+                  <span className={`dot ${s.status}`} />
+                  <div className="grow">
+                    <div className="row" style={{ gap: 6 }}>
+                      <span className="bold ellipsis">{s.name}</span>
+                      {badge && <span className={`badge ${badge[0]}`}>{badge[1]}</span>}
+                      {s.moved && <span className="badge">Moved</span>}
+                    </div>
+                    <div className="small muted">
+                      {formatDay(s.date, today)} · {envName(s.environment)} · {s.targetDurationMin || Math.round(estimateSessionSec(s) / 60)} min
+                    </div>
+                  </div>
+                </button>
               )
             })}
-            {!w.sessions.length && <div className="empty small">Nothing planned</div>}
+            {!w.sessions.length && <div className="empty small">Rest week</div>}
           </div>
         </div>
       ))}
@@ -117,7 +127,6 @@ export default function PlanPage({ onOpenSession }) {
         ))}
       </div>
 
-      {moving && <CantTodaySheet session={moving} title={`Move ${moving.name}?`} allowSkip={moving.status === 'today'} onClose={() => setMoving(null)} />}
     </div>
   )
 }
