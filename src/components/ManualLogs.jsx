@@ -3,7 +3,9 @@ import { Sheet, toast } from './ui.jsx'
 import { ExerciseName } from './ExerciseInfo.jsx'
 import { useStore } from '../lib/store.jsx'
 import { formatDay, nowMs, todayISO, uid } from '../lib/dates.js'
-import { cardioBlockOf, durationText, outsideWorkoutRecord, parseDuration, replacementRecord } from '../lib/manualLogs.js'
+import {
+  cardioBlockOf, durationText, linkRunFields, missingCardioBlocks, outsideWorkoutRecord, parseDuration, replacementRecord, runFieldsFrom,
+} from '../lib/manualLogs.js'
 
 const num = text => {
   const v = Number(String(text ?? '').trim().replace(',', '.'))
@@ -21,18 +23,34 @@ function RpeChips({ value, onChange }) {
   )
 }
 
+/** Distance, time and pace for a run. Fill in any two; the third follows. */
+function RunFields({ value, onChange }) {
+  const field = (key, label, placeholder, mode) => (
+    <label className="grow stack tight" style={{ minWidth: 0 }}>
+      <span className="field-label">{label}</span>
+      <input inputMode={mode} placeholder={placeholder} value={value[key]} onChange={e => onChange(linkRunFields(value, key, e.target.value))} />
+    </label>
+  )
+  return (
+    <div className="row run-fields">
+      {field('distance', 'Km', '6.2', 'decimal')}
+      {field('duration', 'Time', '38.30', 'decimal')}
+      {field('pace', 'Pace /km', '6.10', 'decimal')}
+    </div>
+  )
+}
+
 /** "Done outside the app" for a cardio session: distance, duration, optional RPE → a normal workout log. */
 export function OutsideLogSheet({ session, onClose, onSaved }) {
   const { addRecord } = useStore()
   const block = cardioBlockOf(session)
-  const [distance, setDistance] = useState('')
-  const [duration, setDuration] = useState(block?.durationMin ? String(block.durationMin) : '')
+  const [run, setRun] = useState({ distance: '', duration: block?.durationMin ? String(block.durationMin) : '', pace: '' })
   const [rpe, setRpe] = useState(null)
   const [note, setNote] = useState('')
   const today = todayISO()
   const date = session.date && session.date < today ? session.date : today
-  const durationSec = parseDuration(duration)
-  const distanceKm = num(distance)
+  const durationSec = parseDuration(run.duration)
+  const distanceKm = num(run.distance)
   const ok = durationSec && distanceKm != null && distanceKm > 0
 
   const save = () => {
@@ -49,17 +67,9 @@ export function OutsideLogSheet({ session, onClose, onSaved }) {
           <h2>Done outside the app</h2>
           <p className="muted small">{session.name} · logged for {formatDay(date, today)}</p>
         </div>
-        <div className="row">
-          <label className="grow stack tight">
-            <span className="field-label">Distance (km)</span>
-            <input inputMode="decimal" placeholder="e.g. 6.2" value={distance} onChange={e => setDistance(e.target.value)} />
-          </label>
-          <label className="grow stack tight">
-            <span className="field-label">Time (min or m:ss)</span>
-            <input inputMode="numeric" placeholder="e.g. 38:30" value={duration} onChange={e => setDuration(e.target.value)} />
-          </label>
-        </div>
-        {duration && !durationSec && <div className="tiny" style={{ color: 'var(--bad)' }}>Write the time as minutes (40), m:ss (38:30) or h:mm:ss.</div>}
+        <RunFields value={run} onChange={setRun} />
+        <div className="tiny faint">Fill in any two — the third follows. Times as minutes (40) or min.sec (38.30); 1.05.00 for over an hour.</div>
+        {run.duration && !durationSec && <div className="tiny" style={{ color: 'var(--bad)' }}>Can't read that time.</div>}
         <div className="field-label">How hard? (RPE, optional)</div>
         <RpeChips value={rpe} onChange={setRpe} />
         <textarea rows={2} placeholder="Notes for the coach (optional)" value={note} onChange={e => setNote(e.target.value)} />
@@ -71,15 +81,17 @@ export function OutsideLogSheet({ session, onClose, onSaved }) {
 
 /** Correct a wrong workout log: writes a new log that supersedes it. The old file stays in the repo. */
 export function ReplaceLogSheet({ workout: w, onClose, onSaved }) {
-  const { addRecord, records } = useStore()
+  const { addRecord, records, plan } = useStore()
+  const [missing] = useState(() => missingCardioBlocks(w, plan))
   const [date, setDate] = useState(w.date)
   const [duration, setDuration] = useState(durationText(w.actualSec))
   const [rpe, setRpe] = useState(w.sessionRpe ?? null)
   const [note, setNote] = useState(w.note || '')
   const [blocks, setBlocks] = useState(() => Object.fromEntries((w.blocks || []).map(b => [b.blockId, {
-    cardio: b.cardio ? { distance: b.cardio.distanceKm ?? '', duration: durationText(b.cardio.durationSec) } : null,
+    cardio: b.cardio ? runFieldsFrom(b.cardio) : null,
     sets: Object.fromEntries((b.exercises || []).map(ex => [ex.exerciseId, ex.sets.map(s => ({ reps: s.reps ?? '', load: s.load ?? '' }))])),
   }])))
+  const [added, setAdded] = useState(() => Object.fromEntries(missing.map(m => [m.blockId, runFieldsFrom(null)])))
   const today = todayISO()
   const outside = w.source === 'outside'
 
@@ -111,6 +123,14 @@ export function ReplaceLogSheet({ workout: w, onClose, onSaved }) {
       }
       out.blocks[blockId] = e
     }
+    // A run the log is missing: optional, but if you fill anything in, the time has to be readable.
+    for (const m of missing) {
+      const f = added[m.blockId]
+      if (!f.distance.trim() && !f.duration.trim() && !f.pace.trim()) continue
+      const sec = parseDuration(f.duration)
+      if (!sec) return null
+      out.blocks[m.blockId] = { add: m, cardio: { durationSec: sec, distanceKm: num(f.distance) } }
+    }
     return out
   })()
 
@@ -136,7 +156,7 @@ export function ReplaceLogSheet({ workout: w, onClose, onSaved }) {
           {!outside && (
             <label className="grow stack tight">
               <span className="field-label">Total time</span>
-              <input inputMode="numeric" value={duration} onChange={e => setDuration(e.target.value)} />
+              <input inputMode="decimal" value={duration} onChange={e => setDuration(e.target.value)} />
             </label>
           )}
         </div>
@@ -147,18 +167,7 @@ export function ReplaceLogSheet({ workout: w, onClose, onSaved }) {
           return (
             <div key={b.blockId} className="card tight stack tight">
               <span className="bold">{b.title}</span>
-              {e.cardio && (
-                <div className="row">
-                  <label className="grow stack tight">
-                    <span className="field-label">Distance (km)</span>
-                    <input inputMode="decimal" value={e.cardio.distance} onChange={ev => patch(b.blockId, x => { x.cardio.distance = ev.target.value })} />
-                  </label>
-                  <label className="grow stack tight">
-                    <span className="field-label">Time</span>
-                    <input inputMode="numeric" value={e.cardio.duration} onChange={ev => patch(b.blockId, x => { x.cardio.duration = ev.target.value })} />
-                  </label>
-                </div>
-              )}
+              {e.cardio && <RunFields value={e.cardio} onChange={v => patch(b.blockId, x => { x.cardio = v })} />}
               {(b.exercises || []).map(ex => (
                 <div key={ex.exerciseId} className="stack tight">
                   <div className="small"><ExerciseName exerciseId={ex.exerciseId} className="muted" /></div>
@@ -178,10 +187,18 @@ export function ReplaceLogSheet({ workout: w, onClose, onSaved }) {
           )
         })}
 
+        {missing.map(m => (
+          <div key={m.blockId} className="card tight stack tight">
+            <div className="row between"><span className="bold">{m.title}</span><span className="badge warn">Not in this log</span></div>
+            <div className="tiny faint">Skipped in the app but did it anyway? Fill it in and it's logged as done.</div>
+            <RunFields value={added[m.blockId]} onChange={v => setAdded(prev => ({ ...prev, [m.blockId]: v }))} />
+          </div>
+        ))}
+
         <div className="field-label">Session RPE</div>
         <RpeChips value={rpe} onChange={setRpe} />
         <textarea rows={2} placeholder="Notes for the coach" value={note} onChange={e => setNote(e.target.value)} />
-        {!edits && <div className="tiny" style={{ color: 'var(--bad)' }}>Check the numbers. Every set needs reps; times are minutes (40), m:ss (38:30) or h:mm:ss.</div>}
+        {!edits && <div className="tiny" style={{ color: 'var(--bad)' }}>Check the numbers. Every set needs reps, every run a time: minutes (40) or min.sec (38.30).</div>}
         <button className="btn primary block" disabled={!edits} onClick={save}>Save correction</button>
       </div>
     </Sheet>

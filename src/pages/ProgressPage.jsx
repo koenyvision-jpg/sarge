@@ -8,6 +8,7 @@ import { describeAdjustment } from '../lib/adjust.js'
 import { Sheet } from '../components/ui.jsx'
 import { ExerciseName } from '../components/ExerciseInfo.jsx'
 import { ReplaceLogSheet } from '../components/ManualLogs.jsx'
+import { paceText } from '../lib/manualLogs.js'
 
 const pct = v => (v == null ? '—' : `${Math.round(v * 100)}%`)
 
@@ -129,7 +130,7 @@ export default function ProgressPage() {
                 {(b.exercises || []).map(e => (
                   <div key={e.exerciseId} className="small"><ExerciseName exerciseId={e.exerciseId} className="muted" suffix=":" /> {summarizeSets(e.sets)}</div>
                 ))}
-                {b.cardio && <div className="small muted">{formatDuration(b.cardio.durationSec)}{b.cardio.distanceKm ? ` · ${b.cardio.distanceKm} km` : ''}{b.cardio.avgHr ? ` · ${b.cardio.avgHr} bpm` : ''}</div>}
+                {b.cardio && <div className="small muted">{formatDuration(b.cardio.durationSec)}{b.cardio.distanceKm ? ` · ${b.cardio.distanceKm} km · ${paceText(b.cardio.durationSec / b.cardio.distanceKm)} /km` : ''}{b.cardio.avgHr ? ` · ${b.cardio.avgHr} bpm` : ''}</div>}
                 {b.timed?.length > 0 && <div className="small muted">{b.timed.filter(t => t.completed).length}/{b.timed.length} intervals/holds done</div>}
               </div>
             ))}

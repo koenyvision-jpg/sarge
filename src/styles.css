@@ -429,3 +429,5 @@ a.btn { text-decoration: none; }
 .fix-set { gap: 8px; }
 .fix-set > span:first-child { width: 14px; text-align: center; }
 .fix-set input { width: 76px; flex: none; padding: 8px 10px; }
+.run-fields { gap: 8px; align-items: flex-end; }
+.run-fields input { min-width: 0; width: 100%; }

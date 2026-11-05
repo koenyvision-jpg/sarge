@@ -80,3 +80,41 @@ test('fixing an outside run keeps its duration in step with the cardio block', (
   assert.equal(fixed.blocks[0].cardio.distanceKm, 8)
   assert.equal(fixed.source, 'outside')
 })
+
+test('run fields: any two give the third', async () => {
+  const { linkRunFields, paceText } = await import('./manualLogs.js')
+  const blank = { distance: '', duration: '', pace: '' }
+  let f = linkRunFields(blank, 'distance', '6,4')
+  f = linkRunFields(f, 'duration', '38.30')
+  assert.equal(f.pace, '6:01')
+  f = linkRunFields(f, 'pace', '5:30')
+  assert.equal(f.duration, '35:12', 'pace with a distance changes the time')
+  let g = linkRunFields(blank, 'duration', '30')
+  g = linkRunFields(g, 'pace', '6')
+  assert.equal(g.distance, '5', 'pace with only a time gives the distance')
+  let h = linkRunFields(blank, 'pace', '5.00')
+  h = linkRunFields(h, 'distance', '10')
+  assert.equal(h.duration, '50', 'distance with only a pace gives the time')
+  assert.equal(paceText(361), '6:01')
+})
+
+test('a skipped run can be put back when correcting, and its skip is dropped', async () => {
+  const { missingCardioBlocks } = await import('./manualLogs.js')
+  const session = { id: 's-run', name: 'Run', blocks: [
+    { id: 'b0', type: 'hold', items: [] },
+    { id: 'b1', type: 'cardio', exerciseId: 'run', durationMin: 35 },
+    { id: 'b2', type: 'hold', items: [] },
+  ] }
+  const w = { type: 'workout', id: 'A', sessionId: 's-run', date: '2026-11-05', name: 'Run', actualSec: 8, plannedSec: 2205,
+    adjustments: [{ type: 'skip', at: 'during', exerciseId: 'leg-swing', kind: 'timed' }, { type: 'skip', at: 'during', exerciseId: 'run', kind: 'cardio' }],
+    blocks: [{ blockId: 'b0', type: 'hold', title: 'Warm-up', actualSec: 4, exercises: [], timed: [] }, { blockId: 'b2', type: 'hold', title: 'Cool-down', actualSec: 1, exercises: [], timed: [] }] }
+  const missing = missingCardioBlocks(w, { sessions: [session] })
+  assert.deepEqual(missing.map(m => [m.blockId, m.exerciseId, m.index]), [['b1', 'run', 1]])
+  assert.deepEqual(missingCardioBlocks(w, { sessions: [] }).map(m => m.exerciseId), ['run'], 'falls back to the skip when the session is gone')
+
+  const fixed = replacementRecord(w, { actualSec: 2160, blocks: { b1: { add: missing[0], cardio: { durationSec: 2100, distanceKm: 6 } } } }, [w], { id: 'B', now: 1 })
+  assert.deepEqual(fixed.blocks.map(b => b.blockId), ['b0', 'b1', 'b2'])
+  assert.deepEqual(fixed.blocks[1].cardio, { exerciseId: 'run', durationSec: 2100, distanceKm: 6, avgHr: null })
+  assert.deepEqual(fixed.adjustments.map(a => a.exerciseId), ['leg-swing'], 'the run is no longer a skip')
+  assert.deepEqual(missingCardioBlocks(fixed, { sessions: [session] }), [])
+})

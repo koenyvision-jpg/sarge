@@ -145,6 +145,8 @@ or skips. It is dated on the session's date if that has passed, otherwise today.
 with a new `id` and `"supersedes": "<old id>"` (plus `createdAt`). The old file stays, but it no longer counts:
 **ignore every log whose `id` appears in another log's `supersedes`** — for compliance, PRs, volume and history.
 Chains work the same way: if C supersedes B and B supersedes A, only C counts.
+A correction may also add a `cardio` block the original log was missing (run skipped in the app but done anyway);
+the matching `skip` adjustment is then removed. Pace isn't stored — it's `durationSec / distanceKm`.
 ```json
 { "type": "workout", "id": "w9c1…", "supersedes": "w4b2…", "createdAt": 1760400000000, "sessionId": "s-2026-10-14",
   "date": "2026-10-14", "name": "Zone 2 Run", "source": "outside", "actualSec": 2310, "sessionRpe": 4,

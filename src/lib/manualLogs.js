@@ -2,6 +2,7 @@
 // and a corrected copy of a wrong log (which `supersedes` the old one — see liveRecords).
 
 import { blockTitle, findPRs } from './engine.js'
+import { getExercise } from './exercises.js'
 
 /** The session's first cardio block, if it has one ("Done outside the app" logs against it). */
 export function cardioBlockOf(session) {
@@ -48,6 +49,26 @@ export function outsideWorkoutRecord(session, { durationSec, distanceKm = null, 
  * A corrected copy of `old` with `edits` applied, under a new id, pointing back at it with `supersedes`.
  * `records` should be the live records; the old log is left out when PRs are recomputed.
  */
+/**
+ * Cardio blocks a log could hold but doesn't: the planned session's cardio blocks missing from the log,
+ * or (if the session is gone from the plan) one per cardio skip in its adjustments.
+ * `index` is where the block sits in the planned session, to put it back in order.
+ */
+export function missingCardioBlocks(workout, plan) {
+  const logged = new Set((workout.blocks || []).map(b => b.blockId))
+  const session = plan?.sessions?.find(s => s.id === workout.sessionId)
+  if (session) {
+    return session.blocks
+      .map((b, index) => ({ b, index }))
+      .filter(({ b }) => b.type === 'cardio' && !logged.has(b.id))
+      .map(({ b, index }) => ({ blockId: b.id, exerciseId: b.exerciseId, title: blockTitle(b), index }))
+  }
+  return (workout.adjustments || [])
+    .filter(a => a.type === 'skip' && a.kind === 'cardio')
+    .map((a, i) => ({ blockId: `cardio-${i + 1}`, exerciseId: a.exerciseId, title: getExercise(a.exerciseId).name }))
+    .filter(x => !logged.has(x.blockId))
+}
+
 export function replacementRecord(old, edits, records, { id, now }) {
   const next = structuredClone(old)
   Object.assign(next, { id, supersedes: old.id, createdAt: now })
@@ -56,6 +77,19 @@ export function replacementRecord(old, edits, records, { id, now }) {
   if (edits.actualSec != null) next.actualSec = edits.actualSec
   if ('sessionRpe' in edits) next.sessionRpe = edits.sessionRpe
   if ('note' in edits) next.note = edits.note
+  // Cardio blocks the log is missing (skipped in the app, run anyway): add them back and drop the skip.
+  for (const [blockId, e] of Object.entries(edits.blocks || {})) {
+    if (!e.add || !e.cardio || (next.blocks || []).some(b => b.blockId === blockId)) continue
+    const { durationSec, distanceKm = null } = e.cardio
+    const block = {
+      blockId, type: 'cardio', title: e.add.title || getExercise(e.add.exerciseId).name, actualSec: durationSec,
+      exercises: [], timed: [], cardio: { exerciseId: e.add.exerciseId, durationSec, distanceKm, avgHr: null },
+    }
+    next.blocks = next.blocks || []
+    next.blocks.splice(Math.min(e.add.index ?? next.blocks.length, next.blocks.length), 0, block)
+    const skip = (next.adjustments || []).findIndex(a => a.type === 'skip' && a.kind === 'cardio' && a.exerciseId === e.add.exerciseId)
+    if (skip >= 0) next.adjustments.splice(skip, 1)
+  }
   for (const b of next.blocks || []) {
     const e = edits.blocks?.[b.blockId]
     if (!e) continue
@@ -91,4 +125,43 @@ export function durationText(sec) {
   const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.round(sec % 60)
   const pad = v => String(v).padStart(2, '0')
   return h ? `${h}:${pad(m)}:${pad(s)}` : s ? `${m}:${pad(s)}` : String(m)
+}
+
+/** Seconds per km → "6:01". */
+export function paceText(secPerKm) {
+  if (!secPerKm || !Number.isFinite(secPerKm)) return ''
+  const t = Math.round(secPerKm)
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`
+}
+
+const readKm = text => {
+  const v = Number(String(text ?? '').trim().replace(',', '.'))
+  return String(text ?? '').trim() !== '' && Number.isFinite(v) && v > 0 ? v : null
+}
+
+/**
+ * Distance / time / pace are linked: change one and the one that follows from the other two updates.
+ * Pace changes the time if there's a distance (else the distance); distance or time changes the pace
+ * if the other is there (else they're derived from the pace).
+ */
+export function linkRunFields(prev, field, value) {
+  const next = { ...prev, [field]: value }
+  const km = readKm(next.distance), sec = parseDuration(next.duration), pace = parseDuration(next.pace)
+  if (field === 'pace') {
+    if (pace && km) next.duration = durationText(Math.round(pace * km))
+    else if (pace && sec) next.distance = String(Math.round((sec / pace) * 100) / 100)
+  } else if (field === 'distance') {
+    if (km && sec) next.pace = paceText(sec / km)
+    else if (km && pace) next.duration = durationText(Math.round(pace * km))
+  } else if (field === 'duration') {
+    if (sec && km) next.pace = paceText(sec / km)
+    else if (sec && pace) next.distance = String(Math.round((sec / pace) * 100) / 100)
+  }
+  return next
+}
+
+/** Starting values for the linked fields from a logged cardio entry. */
+export function runFieldsFrom(cardio) {
+  const sec = cardio?.durationSec, km = cardio?.distanceKm
+  return { distance: km ? String(km) : '', duration: durationText(sec), pace: sec && km ? paceText(sec / km) : '' }
 }
