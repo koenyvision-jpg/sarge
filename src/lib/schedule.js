@@ -21,6 +21,16 @@ export function recordPath(rec) {
 const keyOf = (sessionId, date) => `${sessionId}|${date}`
 
 /**
+ * Records minus the ones another record replaces (`supersedes: "<old id>"`). Chains work:
+ * if B replaces A and C replaces B, only C is left. Everything the app shows and counts uses this.
+ */
+export function liveRecords(records) {
+  const replaced = new Set()
+  for (const r of records) if (r.supersedes) replaced.add(r.supersedes)
+  return replaced.size ? records.filter(r => !replaced.has(r.id)) : records
+}
+
+/**
  * Legacy: the app used to let the user move sessions (logs/*-reschedule-*.json). The coach owns the
  * schedule now, so an old move only still applies while the plan has that session on the date it
  * was originally moved away from. Once the coach has rewritten the plan, the plan wins.
@@ -126,7 +136,8 @@ export function missedRecord(session, today, now) {
 
 /** Logged misses from the last 14 days that you haven't explained yet (oldest first). */
 export function unexplainedMisses(records, today) {
-  const explained = new Set(records.filter(r => r.type === 'excuse').map(r => keyOf(r.sessionId, r.sessionDate)))
+  // Explained, or logged as done on that day after all (e.g. a run logged from outside the app).
+  const explained = new Set(records.filter(r => r.type === 'excuse' || r.type === 'workout').map(r => keyOf(r.sessionId, r.sessionDate ?? r.date)))
   return records
     .filter(r => r.type === 'missed' && r.sessionDate < today && daysBetween(r.sessionDate, today) <= 14
       && !explained.has(keyOf(r.sessionId, r.sessionDate)))
@@ -203,7 +214,7 @@ export function history(records, plan) {
   for (const r of records) {
     const k = keyOf(r.sessionId, r.sessionDate)
     if (r.type === 'workout') out.push({ kind: 'workout', key: r.id, date: r.date, at: r.startedAt || 0, workout: r })
-    else if (r.type === 'missed') {
+    else if (r.type === 'missed' && !doneOn.has(k)) {
       out.push({ kind: 'missed', key: r.id, date: r.sessionDate, at: 0, name: r.sessionName || nameOf(r.sessionId) || 'Session', excuse: excuses.get(k) || null })
     } else if (r.type === 'excuse' && r.sessionId && r.sessionDate && !missed.has(k) && !doneOn.has(k)) {
       out.push({ kind: 'excused', key: r.id, date: r.sessionDate, at: 0, name: r.sessionName || nameOf(r.sessionId) || 'Session', excuse: r })

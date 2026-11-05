@@ -8,7 +8,7 @@ const standalone = () => window.matchMedia?.('(display-mode: standalone)').match
 
 export default function SettingsPage() {
   const store = useStore()
-  const { github, settings, syncStatus, syncQueue, records, plan, environments } = store
+  const { github, settings, syncStatus, syncQueue, allRecords: records, plan, environments } = store
   const [form, setForm] = useState(github)
   const [busy, setBusy] = useState(null)
   const [confirmWipe, setConfirmWipe] = useState(false)

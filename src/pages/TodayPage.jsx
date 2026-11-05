@@ -104,14 +104,18 @@ function SessionCard({ session: s, envName, onOpen, onCant, hideActions }) {
           <div className="bold" style={{ fontSize: 19 }}>{s.name}</div>
           <span className="badge good">Done</span>
         </div>
-        <div className="small muted tnum" style={{ marginTop: 4 }}>
+        {w.source === 'outside' ? (
+          <div className="small muted tnum" style={{ marginTop: 4 }}>
+            Outside the app · {w.blocks?.[0]?.cardio?.distanceKm ?? '—'} km in {formatDuration(w.actualSec)}{w.sessionRpe ? ` · RPE ${w.sessionRpe}` : ''}
+          </div>
+        ) : <div className="small muted tnum" style={{ marginTop: 4 }}>
           {formatDuration(w.actualSec)} vs {formatMinutes(w.plannedSec)} planned
           {' · '}
           <span style={{ color: delta > 120 ? 'var(--warn)' : 'var(--good)' }}>
             {delta > 0 ? `+${formatDuration(delta)}` : `−${formatDuration(-delta)}`}
           </span>
           {w.sessionRpe ? ` · RPE ${w.sessionRpe}` : ''}
-        </div>
+        </div>}
       </div>
     )
   }

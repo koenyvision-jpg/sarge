@@ -426,3 +426,6 @@ a.btn { text-decoration: none; }
 .tbtn:disabled { opacity: 0.3; }
 .paused-pill { align-self: center; padding: 6px 14px; border-radius: 999px; background: var(--warn-soft); color: var(--warn); font-size: 13px; font-weight: 800; letter-spacing: 0.6px; text-transform: uppercase; font-variant-numeric: tabular-nums; }
 .tbtn.big { width: 76px; }
+.fix-set { gap: 8px; }
+.fix-set > span:first-child { width: 14px; text-align: center; }
+.fix-set input { width: 76px; flex: none; padding: 8px 10px; }

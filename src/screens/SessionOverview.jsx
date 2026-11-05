@@ -13,6 +13,8 @@ import {
 } from '../lib/adjust.js'
 import { Sheet, Stepper, toast } from '../components/ui.jsx'
 import { ExerciseInfoButton, ExerciseName } from '../components/ExerciseInfo.jsx'
+import { OutsideLogSheet } from '../components/ManualLogs.jsx'
+import { cardioBlockOf } from '../lib/manualLogs.js'
 
 const GROUP_LABEL = { superset: 'Superset', circuit: 'Circuit', interval: 'Intervals', hold: 'Mobility / holds', cardio: 'Cardio' }
 const fmtRest = s => formatDuration(s)
@@ -25,6 +27,7 @@ export default function SessionOverview({ session, onClose, onStart }) {
   const [openId, setOpenId] = useState(null)
   const [swap, setSwap] = useState(null) // { blockId, key, exerciseId }
   const [adding, setAdding] = useState(false)
+  const [outside, setOutside] = useState(false)
   const now = useNow(30000)
   const today = todayISO()
   const readOnly = session.status === 'done'
@@ -123,13 +126,17 @@ export default function SessionOverview({ session, onClose, onStart }) {
           )}
         </div>
 
-        <div className="bottombar">
+        <div className="bottombar stack tight">
           {readOnly
             ? <button className="btn block big" disabled>Completed</button>
             : <button className="btn primary block big" onClick={start} disabled={!draft.blocks.length}>
                 Start workout · {Math.round(estSec / 60)} min
               </button>}
+          {!readOnly && cardioBlockOf(session) && (
+            <button className="btn ghost block" onClick={() => setOutside(true)}>Done outside the app</button>
+          )}
         </div>
+        {outside && <OutsideLogSheet session={session} onClose={() => setOutside(false)} onSaved={onClose} />}
       </div>
 
       <SwapSheet

@@ -7,12 +7,14 @@ import { summarizeSets } from '../lib/engine.js'
 import { describeAdjustment } from '../lib/adjust.js'
 import { Sheet } from '../components/ui.jsx'
 import { ExerciseName } from '../components/ExerciseInfo.jsx'
+import { ReplaceLogSheet } from '../components/ManualLogs.jsx'
 
 const pct = v => (v == null ? '—' : `${Math.round(v * 100)}%`)
 
 export default function ProgressPage() {
   const { records, plan } = useStore()
   const [open, setOpen] = useState(null)
+  const [fixing, setFixing] = useState(null)
   const today = todayISO()
   const all = workouts(records)
   const events = timeline(scheduledSessions(plan, records, today), records, plan)
@@ -20,7 +22,7 @@ export default function ProgressPage() {
   const days = heatmap(records, today, 12, events.filter(e => e.date < today))
   const log = history(records, plan).slice(0, 60)
   const prs = prBoard(records).slice(0, 8)
-  const recent = all.slice(0, 10)
+  const recent = all.filter(w => w.source !== 'outside' && w.plannedSec).slice(0, 10) // pacing only means something for in-app workouts
   const avgOver = recent.length ? recent.reduce((s, w) => s + (w.actualSec - w.plannedSec), 0) / recent.length : null
   const avgDrag = recent.length ? recent.reduce((s, w) => s + (w.overSec || 0), 0) / recent.length : null
 
@@ -98,8 +100,11 @@ export default function ProgressPage() {
             <button key={e.key} className="list-row" onClick={() => setOpen(w)}>
               <span className="dot done" />
               <div className="grow">
-                <div className="bold ellipsis">{w.name || 'Workout'}</div>
-                <div className="tiny faint">{formatDay(w.date, today)}{w.sessionRpe ? ` · RPE ${w.sessionRpe}` : ''}{w.prs?.length ? ` · ${w.prs.length} PR` : ''}</div>
+                <div className="row" style={{ gap: 6 }}>
+                  <span className="bold ellipsis">{w.name || 'Workout'}</span>
+                  {w.supersedes && <span className="badge">Corrected</span>}
+                </div>
+                <div className="tiny faint">{formatDay(w.date, today)}{w.source === 'outside' ? ' · outside the app' : ''}{w.sessionRpe ? ` · RPE ${w.sessionRpe}` : ''}{w.prs?.length ? ` · ${w.prs.length} PR` : ''}</div>
               </div>
               <div className="tnum small" style={{ textAlign: 'right' }}>
                 <div>{formatDuration(w.actualSec || 0)}</div>
@@ -132,9 +137,11 @@ export default function ProgressPage() {
               <div className="small muted">{open.adjustments.map((a, i) => <div key={i}>• {describeAdjustment(a)}</div>)}</div>
             )}
             {open.note && <div className="card tight small">“{open.note}”</div>}
+            <button className="btn ghost block" onClick={() => setFixing(open)}>Something wrong? Fix this log</button>
           </div>
         )}
       </Sheet>
+      {fixing && <ReplaceLogSheet workout={fixing} onClose={() => setFixing(null)} onSaved={rec => { setFixing(null); setOpen(rec) }} />}
     </div>
   )
 }

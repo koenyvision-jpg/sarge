@@ -135,6 +135,23 @@ Adjustment types: `swap`, `sets`, `reps`, `load`, `rest`, `remove`, `add`, `reor
 mid-workout; time added shows up in `overSec` / `restOverSec`.
 Patterns in adjustments (always cutting the same set, always swapping the same lift) are worth calling out.
 
+**Runs done outside the app.** On a session with a `cardio` block the user can log it without the workout flow.
+That writes a normal workout log with `"source": "outside"`, one `cardio` block (`durationSec`, `distanceKm`),
+`actualSec` = the run's duration, `plannedSec` = the block's `durationMin`, `sessionRpe` if given, and no adjustments
+or skips. It is dated on the session's date if that has passed, otherwise today. Timing fields (`overSec`,
+`pausedSec`) are 0 — don't read pacing into them.
+
+**Corrections — `supersedes`.** Logs are never edited. To fix a wrong log, the app writes a new log of the same type
+with a new `id` and `"supersedes": "<old id>"` (plus `createdAt`). The old file stays, but it no longer counts:
+**ignore every log whose `id` appears in another log's `supersedes`** — for compliance, PRs, volume and history.
+Chains work the same way: if C supersedes B and B supersedes A, only C counts.
+```json
+{ "type": "workout", "id": "w9c1…", "supersedes": "w4b2…", "createdAt": 1760400000000, "sessionId": "s-2026-10-14",
+  "date": "2026-10-14", "name": "Zone 2 Run", "source": "outside", "actualSec": 2310, "sessionRpe": 4,
+  "blocks": [ { "blockId": "b1", "type": "cardio", "title": "Run", "actualSec": 2310,
+    "exercises": [], "timed": [], "cardio": { "exerciseId": "run", "durationSec": 2310, "distanceKm": 6.4, "avgHr": null } } ] }
+```
+
 `logs/YYYY-MM-DD-checkin.json` — 1–5 scales (5 = best for sleep/energy, 5 = worst for soreness/stress)
 ```json
 { "type": "checkin", "id": "checkin-2026-10-12", "date": "2026-10-12",
