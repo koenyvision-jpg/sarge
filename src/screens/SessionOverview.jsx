@@ -12,6 +12,7 @@ import {
   swapExercise, unavailableExercises, updateBlock,
 } from '../lib/adjust.js'
 import { Sheet, Stepper, toast } from '../components/ui.jsx'
+import { ExerciseInfoButton, ExerciseName } from '../components/ExerciseInfo.jsx'
 
 const GROUP_LABEL = { superset: 'Superset', circuit: 'Circuit', interval: 'Intervals', hold: 'Mobility / holds', cardio: 'Cardio' }
 const fmtRest = s => formatDuration(s)
@@ -161,7 +162,7 @@ function ExerciseLine({ exerciseId, detail, equipment, last }) {
   const prev = last(exerciseId)
   return (
     <div className="block-ex">
-      <div className="n">{getExercise(exerciseId).name}</div>
+      <div className="n"><ExerciseName exerciseId={exerciseId} className="" /></div>
       <div className="small muted">{detail}</div>
       {prev && <div className="tiny faint">Last: {summarizeSets(prev.sets)}</div>}
       {lack.length > 0 && <div className="tiny" style={{ color: 'var(--warn)' }}>Needs {lack.map(equipmentLabel).join(', ')}</div>}
@@ -194,7 +195,8 @@ function BlockCard({ block: b, index, count, estSec, open, onToggle, equipment, 
 
   return (
     <div className={`block-card${open ? ' open' : ''}${unavailable ? ' warn' : ''}`}>
-      <button className="block-head" onClick={onToggle} aria-expanded={open}>
+      <div className="block-head" role="button" tabIndex={0} onClick={onToggle} aria-expanded={open}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle() } }}>
         <span className="block-num">{index + 1}</span>
         <div className="grow stack tight" style={{ gap: 4 }}>
           {(b.label || GROUP_LABEL[b.type]) && <div className="block-group-label">{b.label || GROUP_LABEL[b.type]}</div>}
@@ -202,7 +204,7 @@ function BlockCard({ block: b, index, count, estSec, open, onToggle, equipment, 
           {restLine && <div className="tiny faint">{restLine}</div>}
         </div>
         <span className="small faint tnum">{Math.round(estSec / 60)}′</span>
-      </button>
+      </div>
       {open && (
         <div className="block-edit">
           <BlockEditor block={b} onChange={onChange} onSwap={onSwap} onRemoveExercise={onRemoveExercise} last={last} />
@@ -233,7 +235,7 @@ function ExerciseEditor({ e, showSets, onChange, onSwap, onRemove, last }) {
   return (
     <div className="stack tight">
       <div className="row between">
-        <span className="bold">{getExercise(e.exerciseId).name}</span>
+        <ExerciseName exerciseId={e.exerciseId} />
         <span className="row">
           <button className="btn small" onClick={onSwap}>Swap</button>
           {onRemove && <button className="btn small danger" onClick={onRemove} aria-label="Remove exercise">✕</button>}
@@ -284,7 +286,7 @@ function BlockEditor({ block: b, onChange, onSwap, onRemoveExercise, last }) {
   if (b.type === 'interval') {
     return (
       <>
-        <Row label={getExercise(b.exerciseId).name}><button className="btn small" onClick={() => onSwap('self', b.exerciseId)}>Swap</button></Row>
+        <Row label={<ExerciseName exerciseId={b.exerciseId} className="" />}><button className="btn small" onClick={() => onSwap('self', b.exerciseId)}>Swap</button></Row>
         <Row label="Rounds"><Stepper label="rounds" value={b.rounds} min={1} max={20} onChange={v => patch({ rounds: v })} /></Row>
         <Row label="Work"><Stepper label="work" value={b.workSec} min={10} max={1200} step={15} format={fmtRest} onChange={v => patch({ workSec: v })} /></Row>
         <Row label="Rest"><Stepper label="rest" value={b.restSec} min={0} max={600} step={15} format={fmtRest} onChange={v => patch({ restSec: v })} /></Row>
@@ -294,7 +296,7 @@ function BlockEditor({ block: b, onChange, onSwap, onRemoveExercise, last }) {
   if (b.type === 'cardio') {
     return (
       <>
-        <Row label={getExercise(b.exerciseId).name}><button className="btn small" onClick={() => onSwap('self', b.exerciseId)}>Swap</button></Row>
+        <Row label={<ExerciseName exerciseId={b.exerciseId} className="" />}><button className="btn small" onClick={() => onSwap('self', b.exerciseId)}>Swap</button></Row>
         <Row label="Duration"><Stepper label="duration" value={b.durationMin} min={5} max={240} step={5} format={v => `${v} min`} onChange={v => patch({ durationMin: v })} /></Row>
       </>
     )
@@ -306,7 +308,7 @@ function BlockEditor({ block: b, onChange, onSwap, onRemoveExercise, last }) {
       {b.items.map((it, i) => (
         <div key={i} className="stack tight">
           <div className="row between">
-            <span className="bold">{getExercise(it.exerciseId).name}{it.sides ? ' (each side)' : ''}</span>
+            <ExerciseName exerciseId={it.exerciseId} suffix={it.sides ? ' (each side)' : ''} />
             <span className="row">
               <button className="btn small" onClick={() => onSwap(i, it.exerciseId)}>Swap</button>
               <button className="btn small danger" onClick={() => onRemoveExercise(i)} aria-label="Remove">✕</button>
@@ -331,16 +333,17 @@ function SwapSheet({ swap, equipment, envName, onClose, onPick }) {
     : alternativesFor(swap.exerciseId, equipment)
   return (
     <Sheet open onClose={onClose}>
-      <h2>Swap {base.name}</h2>
+      <h2 className="ex-name">Swap {base.name}<ExerciseInfoButton exerciseId={base.id} /></h2>
       <p className="muted small" style={{ marginBottom: 12 }}>{showAll ? 'All alternatives' : `Alternatives you can do at: ${envName}`}</p>
       <div className="list">
         {options.map(e => (
-          <button key={e.id} className="list-row" onClick={() => onPick(e.id)}>
-            <div className="grow">
+          <div key={e.id} className="list-row pick-row">
+            <button className="grow" onClick={() => onPick(e.id)}>
               <div className="bold">{e.name}</div>
               <div className="tiny faint">{equipmentSummary(e)}</div>
-            </div>
-          </button>
+            </button>
+            <ExerciseInfoButton exerciseId={e.id} />
+          </div>
         ))}
         {!options.length && <div className="empty">No alternatives here.</div>}
       </div>
@@ -372,7 +375,12 @@ function AddSheet({ open, equipment, onClose, onPick }) {
           <div key={p} className="stack tight">
             <div className="field-label">{PATTERN_LABEL[p]}</div>
             <div className="list">
-              {l.map(e => <button key={e.id} className="list-row" onClick={() => onPick(e.id)}>{e.name}</button>)}
+              {l.map(e => (
+                <div key={e.id} className="list-row pick-row">
+                  <button className="grow" onClick={() => onPick(e.id)}>{e.name}</button>
+                  <ExerciseInfoButton exerciseId={e.id} />
+                </div>
+              ))}
             </div>
           </div>
         ))}

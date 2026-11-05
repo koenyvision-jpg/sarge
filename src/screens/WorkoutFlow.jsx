@@ -10,6 +10,7 @@ import {
 import { getExercise, loadStep, usesLoad } from '../lib/exercises.js'
 import { Sheet, Stepper } from '../components/ui.jsx'
 import WorkoutSummary from './WorkoutSummary.jsx'
+import { ExerciseInfoButton } from '../components/ExerciseInfo.jsx'
 
 const BEHIND_PROMPT_SEC = 180
 
@@ -207,7 +208,7 @@ function SetView({ w, step, elapsed, over, records, onDone }) {
     <>
       <div className="stack tight">
         <div className="flow-kicker">{kicker}</div>
-        <div className="flow-name">{step.label}</div>
+        <div className="flow-name">{step.label}<ExerciseInfoButton exerciseId={step.exerciseId} size="lg" /></div>
         <div className="flow-target">
           Target: <b style={{ color: 'var(--text)' }}>{step.target.reps} reps</b>
           {step.target.load ? ` @ ${step.target.load} kg` : ''}{step.target.rpe ? ` · RPE ${step.target.rpe}` : ''}
@@ -267,7 +268,7 @@ function NextCard({ next, w, records }) {
   return (
     <div className="flow-next">
       <div className="eyebrow">Next</div>
-      <div className="bold" style={{ fontSize: 20 }}>{next.label}{next.side ? ` — ${next.side}` : ''}</div>
+      <div className="bold" style={{ fontSize: 20 }}>{next.label}{next.side ? ` — ${next.side}` : ''}{next.exerciseId && <ExerciseInfoButton exerciseId={next.exerciseId} />}</div>
       <div className="small muted">
         {next.kind === 'set'
           ? `${next.warmup ? `Warm-up ${next.setNo}/${next.setsTotal} · ` : block?.type === 'single' ? `Set ${next.setNo}/${next.setsTotal} · ` : ''}${next.target.reps} reps${next.target.load ? ` @ ${next.target.load} kg` : ''}`
@@ -302,7 +303,7 @@ function TimedView({ step, remaining, total, onSkip }) {
     <>
       <div className="stack tight">
         <div className="flow-kicker">{step.setsTotal > 1 ? `Round ${step.setNo} of ${step.setsTotal}` : 'Hold'}{step.side ? ` · ${step.side}` : ''}</div>
-        <div className="flow-name">{step.label}</div>
+        <div className="flow-name">{step.label}<ExerciseInfoButton exerciseId={step.exerciseId} size="lg" /></div>
         <div className="flow-target">{step.target}</div>
       </div>
       <Ring fraction={remaining / total} color="var(--accent)">
@@ -321,7 +322,7 @@ function CardioView({ step, label, elapsed, total, onDone }) {
     <>
       <div className="stack tight">
         <div className="flow-kicker">{label || 'Cardio'} · {Math.round(total / 60)} min</div>
-        <div className="flow-name">{getExercise(step.exerciseId).name}</div>
+        <div className="flow-name">{getExercise(step.exerciseId).name}<ExerciseInfoButton exerciseId={step.exerciseId} size="lg" /></div>
         {step.target && <div className="flow-target">{step.target}</div>}
       </div>
       <div className={`flow-timer tnum`} style={{ color: left <= 0 ? 'var(--good)' : undefined }}>

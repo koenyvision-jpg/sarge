@@ -3,9 +3,9 @@ import { useStore } from '../lib/store.jsx'
 import { accountability, heatmap, prBoard, scheduledSessions, workouts } from '../lib/schedule.js'
 import { formatDay, formatDuration, todayISO } from '../lib/dates.js'
 import { summarizeSets } from '../lib/engine.js'
-import { getExercise } from '../lib/exercises.js'
 import { describeAdjustment } from '../lib/adjust.js'
 import { Sheet } from '../components/ui.jsx'
+import { ExerciseName } from '../components/ExerciseInfo.jsx'
 
 const pct = v => (v == null ? '—' : `${Math.round(v * 100)}%`)
 
@@ -63,7 +63,7 @@ export default function ProgressPage() {
         {prs.map(p => (
           <div key={p.exerciseId} className="list-row">
             <div className="grow">
-              <div className="bold">{getExercise(p.exerciseId).name}</div>
+              <div><ExerciseName exerciseId={p.exerciseId} /></div>
               <div className="tiny faint">{p.load} kg × {p.reps} · {formatDay(p.date, today)}</div>
             </div>
             <span className="bold tnum">{Math.round(p.e1rm)} kg</span>
@@ -103,7 +103,7 @@ export default function ProgressPage() {
               <div key={b.blockId} className="card tight stack tight">
                 <div className="row between"><span className="bold">{b.title}</span><span className="tiny faint tnum">{formatDuration(b.actualSec)}</span></div>
                 {b.exercises.map(e => (
-                  <div key={e.exerciseId} className="small"><span className="muted">{getExercise(e.exerciseId).name}:</span> {summarizeSets(e.sets)}</div>
+                  <div key={e.exerciseId} className="small"><ExerciseName exerciseId={e.exerciseId} className="muted" suffix=":" /> {summarizeSets(e.sets)}</div>
                 ))}
                 {b.cardio && <div className="small muted">{formatDuration(b.cardio.durationSec)}{b.cardio.distanceKm ? ` · ${b.cardio.distanceKm} km` : ''}{b.cardio.avgHr ? ` · ${b.cardio.avgHr} bpm` : ''}</div>}
                 {b.timed.length > 0 && <div className="small muted">{b.timed.filter(t => t.completed).length}/{b.timed.length} intervals/holds done</div>}

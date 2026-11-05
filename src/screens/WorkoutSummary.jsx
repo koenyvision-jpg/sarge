@@ -2,9 +2,9 @@ import { useMemo, useState } from 'react'
 import { useStore } from '../lib/store.jsx'
 import { formatDuration } from '../lib/dates.js'
 import { buildWorkoutRecord, estimateByBlock, findPRs } from '../lib/engine.js'
-import { getExercise } from '../lib/exercises.js'
 import { describeAdjustment } from '../lib/adjust.js'
 import { toast } from '../components/ui.jsx'
+import { ExerciseName } from '../components/ExerciseInfo.jsx'
 
 function verdict(rec) {
   const over = rec.actualSec - rec.plannedSec
@@ -68,7 +68,7 @@ export default function WorkoutSummary({ workout, onDone }) {
               <div className="eyebrow" style={{ color: 'var(--accent)' }}>Personal records</div>
               {prs.map(p => (
                 <div key={p.exerciseId} className="pr-row">
-                  <span className="bold">{getExercise(p.exerciseId).name}</span>
+                  <ExerciseName exerciseId={p.exerciseId} />
                   <span className="tnum">{p.load} kg × {p.reps} <span className="faint small">(e1RM {Math.round(p.e1rm)} ← {Math.round(p.previous)})</span></span>
                 </div>
               ))}

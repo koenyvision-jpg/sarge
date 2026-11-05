@@ -43,3 +43,16 @@ test('band-hip-flexor-march is never blocked by a missing band', () => {
   // Required equipment still blocks as before.
   assert.deepEqual(missingEquipment('kb-row', ['bands']), ['kettlebell'])
 })
+
+test('every exercise has a how-to and a photo or drawing', async () => {
+  const { existsSync } = await import('node:fs')
+  const { EXERCISE_INFO } = await import('./exerciseInfo.js')
+  const { FIGURES } = await import('./exerciseFigures.js')
+  for (const e of EXERCISES) {
+    const info = EXERCISE_INFO[e.id]
+    assert.ok(info, `${e.id}: no info`)
+    assert.ok(info.how?.length >= 2, `${e.id}: no steps`)
+    if (info.figure) assert.ok(FIGURES[e.id]?.length, `${e.id}: figure missing`)
+    else for (const i of [0, 1]) assert.ok(existsSync(new URL(`../../public/ex/${info.photo}-${i}.jpg`, import.meta.url)), `${e.id}: photo ${info.photo}-${i} missing`)
+  }
+})
