@@ -108,6 +108,7 @@ export const EXERCISES = [
   // Carry
   ex('farmer-carry', "Farmer's carry", 'carry', ['dumbbells'], 'strength', ['grip', 'core']),
   ex('kb-carry', 'Kettlebell carry', 'carry', ['kettlebell'], 'strength', ['grip', 'core']),
+  ex('kb-suitcase-march', 'Kettlebell suitcase march', 'carry', ['kettlebell'], 'strength', ['core', 'grip']),
   // Cardio
   ex('run', 'Run', 'cardio', [], 'cardio'),
   ex('treadmill-run', 'Treadmill run', 'cardio', ['treadmill'], 'cardio'),

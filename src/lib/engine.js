@@ -47,6 +47,13 @@ export function compileSession(session) {
     const rest = (durationSec, label = 'Rest') => {
       if (durationSec > 0) steps.push({ ...base, id: id(), kind: 'rest', durationSec, label })
     }
+    // One set of an exercise; with `perSide` that's the left side, a short switch, then the right side.
+    const sets = (e, setNo, setsTotal, exIndex, extra = {}) => {
+      if (!e.perSide) return steps.push({ ...setStep(base, id(), e, setNo, setsTotal, exIndex), ...extra })
+      steps.push({ ...setStep(base, id(), e, setNo, setsTotal, exIndex), ...extra, side: 'Left' })
+      rest(e.switchSec ?? 10, 'Switch sides')
+      steps.push({ ...setStep(base, id(), e, setNo, setsTotal, exIndex), ...extra, side: 'Right' })
+    }
 
     if (blockIndex > 0 && transitionSec > 0) {
       steps.push({ ...base, id: id(), kind: 'transition', durationSec: transitionSec, label: 'Next up' })
@@ -60,7 +67,7 @@ export function compileSession(session) {
         const exs = block.exercises || []
         for (let r = 1; r <= rounds; r++) {
           exs.forEach((e, i) => {
-            steps.push(setStep(base, id(), e, r, rounds, i))
+            sets(e, r, rounds, i)
             if (i < exs.length - 1) rest(between, 'Switch')
           })
           if (r < rounds) rest(block.restSec ?? 90)
@@ -112,16 +119,13 @@ export function compileSession(session) {
         const warm = e.warmupSets || 0
         for (let k = 1; k <= warm; k++) {
           const reps = e.warmupReps ?? 5
-          steps.push({
-            ...setStep(base, id(), e, k, warm, 0), warmup: true,
-            target: { reps, load: null, rpe: null }, expectedSec: expectedSetSec(reps),
-          })
+          sets(e, k, warm, 0, { warmup: true, target: { reps, load: null, rpe: null }, expectedSec: expectedSetSec(reps) })
           rest(e.warmupRestSec ?? 60)
         }
-        const sets = e.sets || 3
-        for (let s = 1; s <= sets; s++) {
-          steps.push(setStep(base, id(), e, s, sets, 0))
-          if (s < sets) rest(e.restSec ?? 90)
+        const total = e.sets || 3
+        for (let k = 1; k <= total; k++) {
+          sets(e, k, total, 0)
+          if (k < total) rest(e.restSec ?? 90)
         }
       }
     }
@@ -345,11 +349,20 @@ export function lastDroppableSetIndex(state) {
   return -1
 }
 
-/** Drop the last set of the session (plus the rest leading into it). */
+/** Drop the last set of the session (plus the rest leading into it). A per-side set goes as a whole. */
 export function dropLastSet(state) {
   const i = lastDroppableSetIndex(state)
   if (i < 0) return state
-  const removeFrom = state.steps[i - 1]?.kind === 'rest' && i - 1 > state.index ? i - 1 : i
+  let first = i
+  const last = state.steps[i]
+  if (last.side) {
+    for (let k = i - 1; k > state.index; k--) {
+      const s = state.steps[k]
+      if (s.kind === 'set' && s.blockId === last.blockId && s.exerciseId === last.exerciseId && s.setNo === last.setNo) first = k
+      else if (s.kind !== 'rest') break
+    }
+  }
+  const removeFrom = state.steps[first - 1]?.kind === 'rest' && first - 1 > state.index ? first - 1 : first
   const dropped = state.steps[i]
   const steps = [...state.steps.slice(0, removeFrom), ...state.steps.slice(i + 1)]
   return {
@@ -398,7 +411,10 @@ export function buildWorkoutRecord(state, { sessionRpe = null, note = '' } = {})
     if (step.kind === 'set' && !r.skipped) {
       let ex = entry.exercises.find(e => e.exerciseId === step.exerciseId)
       if (!ex) entry.exercises.push(ex = { exerciseId: step.exerciseId, sets: [] })
-      ex.sets.push({ reps: r.reps, load: r.load ?? null, ...(r.rpe ? { rpe: r.rpe } : {}), ...(step.warmup ? { warmup: true } : {}) })
+      ex.sets.push({
+        reps: r.reps, load: r.load ?? null, ...(r.rpe ? { rpe: r.rpe } : {}),
+        ...(step.side ? { side: step.side } : {}), ...(step.warmup ? { warmup: true } : {}),
+      })
     } else if (step.kind === 'timed') {
       entry.timed.push({ exerciseId: step.exerciseId, side: step.side || undefined, plannedSec: step.durationSec, completed: !r.skipped })
     } else if (step.kind === 'cardio' && !r.skipped) {
@@ -475,6 +491,14 @@ export function lastPerformance(exerciseId, records, excludeId) {
 export function summarizeSets(allSets) {
   const sets = (allSets || []).filter(st => !st.warmup)
   if (!sets.length) return ''
+  // Per-side sets: summarise one side and say "each side" when both match, else list both.
+  if (sets.some(st => st.side)) {
+    const left = sets.filter(st => st.side === 'Left'), right = sets.filter(st => st.side === 'Right')
+    const strip = list => list.map(st => ({ reps: st.reps, load: st.load }))
+    const l = summarizeSets(strip(left)), r = summarizeSets(strip(right))
+    if (l === r) return `${l} each side`
+    return [l && `L ${l}`, r && `R ${r}`].filter(Boolean).join(' · ')
+  }
   const same = sets.every(s => s.reps === sets[0].reps && s.load === sets[0].load)
   const fmt = s => (s.load ? `${s.load}×${s.reps}` : `${s.reps}`)
   if (same) return sets[0].load ? `${sets.length}×${sets[0].reps} @ ${sets[0].load} kg` : `${sets.length}×${sets[0].reps}`

@@ -159,6 +159,7 @@ export default function SessionOverview({ session, onClose, onStart }) {
 function prescription(e) {
   const parts = [`${e.sets ? `${e.sets}×` : ''}${e.reps}`]
   if (e.load) parts[0] += ` @ ${e.load} kg`
+  if (e.perSide) parts[0] += ' each side'
   if (e.rpe) parts.push(`RPE ${e.rpe}`)
   if (e.warmupSets) parts.push(`+${e.warmupSets} warm-up`)
   return parts.join(' · ')

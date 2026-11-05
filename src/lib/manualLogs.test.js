@@ -6,7 +6,7 @@ import { bestLifts } from './engine.js'
 import { buildSamplePlan } from './samplePlan.js'
 
 const plan = buildSamplePlan('2026-10-12')
-const run = plan.sessions.find(s => s.blocks.some(b => b.type === 'cardio'))
+const run = plan.sessions.find(s => s.blocks.some(b => b.type === 'cardio') && s.blocks.some(b => b.type === 'hold'))
 
 test('parseDuration reads minutes, m:ss and h:mm:ss; durationText round-trips', () => {
   assert.equal(parseDuration('40'), 2400)
@@ -17,22 +17,43 @@ test('parseDuration reads minutes, m:ss and h:mm:ss; durationText round-trips', 
   for (const sec of [2400, 2310, 3900]) assert.equal(parseDuration(durationText(sec)), sec)
 })
 
-test('outside log is a normal workout log with one cardio block and no skips', () => {
+test('outside log is a normal workout log: the run, warm-up/cool-down ticked, no skips', () => {
   const rec = outsideWorkoutRecord(run, { durationSec: 2310, distanceKm: 6.4, sessionRpe: 4 }, { id: 'w1', today: run.date, now: 10_000_000 })
   const block = run.blocks.find(b => b.type === 'cardio')
+  const holds = run.blocks.filter(b => b.type === 'hold')
+  assert.ok(holds.length > 0, 'sample run session has a mobility block')
   assert.equal(rec.type, 'workout')
   assert.equal(rec.source, 'outside')
   assert.equal(rec.sessionId, run.id)
   assert.equal(rec.date, run.date)
-  assert.equal(rec.actualSec, 2310)
-  assert.equal(rec.plannedSec, block.durationMin * 60)
   assert.equal(rec.sessionRpe, 4)
   assert.deepEqual(rec.adjustments, [])
-  assert.equal(rec.blocks.length, 1)
-  assert.deepEqual(rec.blocks[0].cardio, { exerciseId: block.exerciseId, durationSec: 2310, distanceKm: 6.4, avgHr: null })
-  assert.equal(rec.blocks[0].blockId, block.id)
-  // It marks the session done.
+  assert.deepEqual(rec.blocks.map(b => b.blockId), run.blocks.map(b => b.id), 'planned order')
+  const cardio = rec.blocks.find(b => b.cardio)
+  assert.deepEqual(cardio.cardio, { exerciseId: block.exerciseId, durationSec: 2310, distanceKm: 6.4, avgHr: null })
+  const hold = rec.blocks.find(b => b.type === 'hold')
+  assert.ok(hold.timed.length > 0 && hold.timed.every(t => t.completed), 'holds ticked by default')
+  assert.equal(rec.actualSec, 2310 + hold.actualSec)
   assert.equal(scheduledSessions(plan, [rec], run.date).find(s => s.id === run.id).status, 'done')
+})
+
+test('un-ticked warm-up/cool-down is logged as not done', () => {
+  const rec = outsideWorkoutRecord(run, { durationSec: 2310, distanceKm: 6.4, doneBlockIds: [] }, { id: 'w1', today: run.date, now: 10_000_000 })
+  const hold = rec.blocks.find(b => b.type === 'hold')
+  assert.ok(hold.timed.every(t => !t.completed))
+  assert.equal(hold.actualSec, 0)
+  assert.equal(rec.actualSec, 2310)
+  assert.deepEqual(rec.adjustments, [])
+})
+
+test('a per-side hold in the warm-up logs both sides', () => {
+  const s = { id: 's', name: 'Run', date: '2026-11-05', blocks: [
+    { id: 'w', type: 'hold', label: 'Warm-up', items: [{ exerciseId: 'leg-swing', holdSec: 30, sides: true }] },
+    { id: 'r', type: 'cardio', exerciseId: 'run', durationMin: 30 },
+  ] }
+  const rec = outsideWorkoutRecord(s, { durationSec: 1800, distanceKm: 5 }, { id: 'x', today: '2026-11-05', now: 1 })
+  assert.deepEqual(rec.blocks[0].timed.map(t => t.side), ['Left', 'Right'])
+  assert.equal(rec.blocks[0].title, 'Warm-up')
 })
 
 test('outside log is dated on a past session date, otherwise today', () => {
@@ -74,10 +95,13 @@ test('supersedes: the corrected log replaces the old one everywhere, chains incl
 
 test('fixing an outside run keeps its duration in step with the cardio block', () => {
   const rec = outsideWorkoutRecord(run, { durationSec: 1800, distanceKm: 5 }, { id: 'w', today: run.date, now: 1 })
-  const fixed = replacementRecord(rec, { blocks: { [rec.blocks[0].blockId]: { cardio: { durationSec: 2400, distanceKm: 8 } } } }, [rec], { id: 'w2', now: 2 })
-  assert.equal(fixed.actualSec, 2400)
-  assert.equal(fixed.blocks[0].actualSec, 2400)
-  assert.equal(fixed.blocks[0].cardio.distanceKm, 8)
+  const cardioId = rec.blocks.find(b => b.cardio).blockId
+  const holdSec = rec.blocks.filter(b => !b.cardio).reduce((t, b) => t + b.actualSec, 0)
+  const fixed = replacementRecord(rec, { blocks: { [cardioId]: { cardio: { durationSec: 2400, distanceKm: 8 } } } }, [rec], { id: 'w2', now: 2 })
+  assert.equal(fixed.actualSec, 2400 + holdSec)
+  const c = fixed.blocks.find(b => b.cardio)
+  assert.equal(c.actualSec, 2400)
+  assert.equal(c.cardio.distanceKm, 8)
   assert.equal(fixed.source, 'outside')
 })
 

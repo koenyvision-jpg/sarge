@@ -2,9 +2,11 @@ import { useState } from 'react'
 import { Sheet, toast } from './ui.jsx'
 import { ExerciseName } from './ExerciseInfo.jsx'
 import { useStore } from '../lib/store.jsx'
+import { blockTitle } from '../lib/engine.js'
+import { getExercise } from '../lib/exercises.js'
 import { formatDay, nowMs, todayISO, uid } from '../lib/dates.js'
 import {
-  cardioBlockOf, durationText, linkRunFields, missingCardioBlocks, outsideWorkoutRecord, parseDuration, replacementRecord, runFieldsFrom,
+  cardioBlockOf, durationText, extraBlocksOf, linkRunFields, missingCardioBlocks, outsideWorkoutRecord, parseDuration, replacementRecord, runFieldsFrom,
 } from '../lib/manualLogs.js'
 
 const num = text => {
@@ -47,6 +49,14 @@ export function OutsideLogSheet({ session, onClose, onSaved }) {
   const [run, setRun] = useState({ distance: '', duration: block?.durationMin ? String(block.durationMin) : '', pace: '' })
   const [rpe, setRpe] = useState(null)
   const [note, setNote] = useState('')
+  const extras = extraBlocksOf(session)
+  const [ticked, setTicked] = useState(() => new Set(extras.map(b => b.id)))
+  const toggle = id => setTicked(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    return next
+  })
   const today = todayISO()
   const date = session.date && session.date < today ? session.date : today
   const durationSec = parseDuration(run.duration)
@@ -54,7 +64,7 @@ export function OutsideLogSheet({ session, onClose, onSaved }) {
   const ok = durationSec && distanceKm != null && distanceKm > 0
 
   const save = () => {
-    const rec = outsideWorkoutRecord(session, { durationSec, distanceKm, sessionRpe: rpe, note: note.trim() }, { id: uid('w'), today, now: nowMs() })
+    const rec = outsideWorkoutRecord(session, { durationSec, distanceKm, sessionRpe: rpe, note: note.trim(), doneBlockIds: [...ticked] }, { id: uid('w'), today, now: nowMs() })
     addRecord(rec, `Sarge: workout ${rec.date} — ${rec.name} (outside the app)`)
     toast('Logged. The coach will see it.')
     onSaved?.()
@@ -70,6 +80,22 @@ export function OutsideLogSheet({ session, onClose, onSaved }) {
         <RunFields value={run} onChange={setRun} />
         <div className="tiny faint">Fill in any two — the third follows. Times as minutes (40) or min.sec (38.30); 1.05.00 for over an hour.</div>
         {run.duration && !durationSec && <div className="tiny" style={{ color: 'var(--bad)' }}>Can't read that time.</div>}
+        {extras.length > 0 && (
+          <div className="stack tight">
+            <div className="field-label">Also done</div>
+            <div className="list">
+              {extras.map(b => (
+                <label key={b.id} className="list-row check-row">
+                  <input type="checkbox" checked={ticked.has(b.id)} onChange={() => toggle(b.id)} />
+                  <div className="grow" style={{ minWidth: 0 }}>
+                    <div className="bold">{blockTitle(b)}</div>
+                    <div className="tiny faint ellipsis">{(b.items || []).map(it => getExercise(it.exerciseId).name).join(' · ')}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="field-label">How hard? (RPE, optional)</div>
         <RpeChips value={rpe} onChange={setRpe} />
         <textarea rows={2} placeholder="Notes for the coach (optional)" value={note} onChange={e => setNote(e.target.value)} />

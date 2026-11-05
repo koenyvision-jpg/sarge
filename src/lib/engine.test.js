@@ -179,3 +179,42 @@ test('skips read well in the summary', async () => {
   assert.equal(describeAdjustment({ type: 'skip', kind: 'set', exerciseId: 'back-squat', setNo: 3 }), 'Skipped set 3 of Back squat')
   assert.equal(describeAdjustment({ type: 'skip', kind: 'timed', exerciseId: 'side-plank', setNo: 2, side: 'Left' }), 'Skipped Side plank (left side), round 2')
 })
+
+test('perSide: each set is left, switch, right — in single, superset and circuit blocks', async () => {
+  const { compileSession, startWorkout, advance, buildWorkoutRecord, summarizeSets, dropLastSet, estimateSessionSec } = await import('./engine.js')
+  const single = { id: 's', name: 'x', transitionSec: 0, blocks: [
+    { id: 'b1', type: 'single', exercises: [{ exerciseId: 'kb-suitcase-march', sets: 2, reps: 10, load: 16, restSec: 60, perSide: true }] },
+  ] }
+  const steps = compileSession(single)
+  assert.deepEqual(steps.map(s => s.kind + (s.side ? ':' + s.side : '') + ':' + (s.setNo ?? '')),
+    ['set:Left:1', 'rest:', 'set:Right:1', 'rest:', 'set:Left:2', 'rest:', 'set:Right:2'])
+  assert.equal(steps[1].durationSec, 10, 'default switch is 10 s')
+  assert.equal(steps[1].label, 'Switch sides')
+  const plain = { ...single, blocks: [{ ...single.blocks[0], exercises: [{ ...single.blocks[0].exercises[0], perSide: false }] }] }
+  assert.ok(estimateSessionSec(single) > estimateSessionSec(plain) * 1.5, 'both sides are timed')
+
+  const sup = compileSession({ id: 't', name: 'y', transitionSec: 0, blocks: [{ id: 'b2', type: 'superset', rounds: 2, restBetweenSec: 15, restSec: 60,
+    exercises: [{ exerciseId: 'kb-suitcase-march', reps: 8, perSide: true, switchSec: 5 }, { exerciseId: 'push-up', reps: 10 }] }] })
+  assert.deepEqual(sup.filter(s => s.kind === 'set' && s.setNo === 1).map(s => s.exerciseId + (s.side ? ':' + s.side : '')),
+    ['kb-suitcase-march:Left', 'kb-suitcase-march:Right', 'push-up'])
+  assert.equal(sup[1].durationSec, 5, 'switchSec')
+  const circ = compileSession({ id: 'c', name: 'z', transitionSec: 0, blocks: [{ id: 'b3', type: 'circuit', rounds: 1,
+    exercises: [{ exerciseId: 'kb-suitcase-march', reps: 8, perSide: true }] }] })
+  assert.deepEqual(circ.filter(s => s.kind === 'set').map(s => s.side), ['Left', 'Right'])
+
+  // Logs both sides.
+  let w = startWorkout({ session: single, environment: 'home', now: 0 })
+  for (let t = 1; w.index < w.steps.length; t++) {
+    const st = w.steps[w.index]
+    w = advance(w, t * 1000, st.kind === 'set' ? { reps: st.side === 'Left' ? 10 : 9, load: 16, actualSec: 30 } : { actualSec: 10 })
+  }
+  const sets = buildWorkoutRecord(w).blocks[0].exercises[0].sets
+  assert.deepEqual(sets.map(s => [s.side, s.reps]), [['Left', 10], ['Right', 9], ['Left', 10], ['Right', 9]])
+  assert.equal(summarizeSets(sets), 'L 2×10 @ 16 kg · R 2×9 @ 16 kg')
+  assert.equal(summarizeSets(sets.map(s => ({ ...s, reps: 10 }))), '2×10 @ 16 kg each side')
+
+  // Dropping the last set drops both sides.
+  const fresh = startWorkout({ session: single, environment: 'home', now: 0 })
+  const dropped = dropLastSet(fresh)
+  assert.deepEqual(dropped.steps.map(s => s.kind + (s.side ? ':' + s.side : '')), ['set:Left', 'rest', 'set:Right'])
+})

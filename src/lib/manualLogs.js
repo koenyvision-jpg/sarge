@@ -1,7 +1,7 @@
 // Workout logs that don't come from the in-app workout flow: a run done outside the app,
 // and a corrected copy of a wrong log (which `supersedes` the old one — see liveRecords).
 
-import { blockTitle, findPRs } from './engine.js'
+import { blockTitle, compileSession, estimateSteps, findPRs } from './engine.js'
 import { getExercise } from './exercises.js'
 
 /** The session's first cardio block, if it has one ("Done outside the app" logs against it). */
@@ -9,14 +9,54 @@ export function cardioBlockOf(session) {
   return session?.blocks?.find(b => b.type === 'cardio') || null
 }
 
+/** Blocks around the run that can be ticked off with it: the session's hold blocks (warm-up, cool-down). */
+export function extraBlocksOf(session) {
+  return (session?.blocks || []).filter(b => b.type === 'hold')
+}
+
+/** A hold block as a log entry, every hold marked done or not. */
+function holdEntry(block, done) {
+  const steps = compileSession({ blocks: [block], transitionSec: 0 })
+  const planned = estimateSteps(steps)
+  return {
+    blockId: block.id, type: 'hold', title: blockTitle(block), actualSec: done ? planned : 0, plannedSec: planned,
+    exercises: [],
+    timed: steps.filter(st => st.kind === 'timed').map(st => ({
+      exerciseId: st.exerciseId, ...(st.side ? { side: st.side } : {}), plannedSec: st.durationSec, completed: done,
+    })),
+  }
+}
+
 /**
- * A normal workout log for cardio done outside the app: one cardio block, no adjustments or skips.
+ * A normal workout log for cardio done outside the app: the cardio block, plus the session's warm-up and
+ * cool-down (hold blocks) marked done unless left out of `doneBlockIds`. No adjustments or skips.
  * Logged on the session's date if that has passed (you're catching up), otherwise today.
  */
-export function outsideWorkoutRecord(session, { durationSec, distanceKm = null, sessionRpe = null, note = '' }, { id, today, now }) {
+export function outsideWorkoutRecord(session, { durationSec, distanceKm = null, sessionRpe = null, note = '', doneBlockIds }, { id, today, now }) {
   const block = cardioBlockOf(session)
   const date = session.date && session.date < today ? session.date : today
-  const plannedSec = block?.durationMin ? block.durationMin * 60 : durationSec
+  const done = doneBlockIds ? new Set(doneBlockIds) : null
+  const blocks = []
+  let plannedSec = block?.durationMin ? block.durationMin * 60 : durationSec
+  let actualSec = durationSec
+  for (const b of session.blocks || []) {
+    if (b === block) {
+      blocks.push({
+        blockId: block.id, type: 'cardio', title: blockTitle(block), actualSec: durationSec,
+        exercises: [], timed: [],
+        cardio: { exerciseId: block.exerciseId, durationSec, distanceKm, avgHr: null },
+      })
+    } else if (b.type === 'hold') {
+      const { plannedSec: p, ...entry } = holdEntry(b, done ? done.has(b.id) : true)
+      plannedSec += p
+      actualSec += entry.actualSec
+      blocks.push(entry)
+    }
+  }
+  if (!block) {
+    blocks.unshift({ blockId: 'cardio', type: 'cardio', title: 'Cardio', actualSec: durationSec, exercises: [], timed: [],
+      cardio: { exerciseId: 'run', durationSec, distanceKm, avgHr: null } })
+  }
   return {
     type: 'workout',
     id,
@@ -25,10 +65,10 @@ export function outsideWorkoutRecord(session, { durationSec, distanceKm = null, 
     name: session.name,
     environment: session.environment,
     source: 'outside',
-    startedAt: now - durationSec * 1000,
+    startedAt: now - actualSec * 1000,
     finishedAt: now,
     plannedSec,
-    actualSec: durationSec,
+    actualSec,
     pausedSec: 0,
     overSec: 0,
     restOverSec: 0,
@@ -36,19 +76,14 @@ export function outsideWorkoutRecord(session, { durationSec, distanceKm = null, 
     sessionRpe,
     note,
     adjustments: [],
-    blocks: [{
-      blockId: block?.id || 'cardio', type: 'cardio', title: block ? blockTitle(block) : 'Cardio', actualSec: durationSec,
-      exercises: [], timed: [],
-      cardio: { exerciseId: block?.exerciseId || 'run', durationSec, distanceKm, avgHr: null },
-    }],
+    blocks,
     prs: [],
   }
 }
 
-/**
- * A corrected copy of `old` with `edits` applied, under a new id, pointing back at it with `supersedes`.
- * `records` should be the live records; the old log is left out when PRs are recomputed.
- */
+/** The run in a log (its first cardio block). */
+export const cardioOf = workout => workout?.blocks?.find(b => b.cardio)?.cardio || null
+
 /**
  * Cardio blocks a log could hold but doesn't: the planned session's cardio blocks missing from the log,
  * or (if the session is gone from the plan) one per cardio skip in its adjustments.
@@ -102,9 +137,9 @@ export function replacementRecord(old, edits, records, { id, now }) {
       if (sets) ex.sets = ex.sets.map((s, i) => ({ ...s, ...sets[i] }))
     }
   }
-  // A single-block outside log has nothing else to time, so its duration follows the cardio.
+  // An outside log isn't timed by the app: its duration is the run plus the blocks ticked off with it.
   if (old.source === 'outside' && edits.actualSec == null) {
-    next.actualSec = next.blocks?.[0]?.cardio?.durationSec ?? next.actualSec
+    next.actualSec = (next.blocks || []).reduce((sum, b) => sum + (b.cardio ? b.cardio.durationSec || 0 : b.actualSec || 0), 0)
   }
   next.prs = findPRs(next, records.filter(r => r.id !== old.id))
   return next

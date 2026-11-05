@@ -98,6 +98,15 @@ Unknown ids still work but show a generated name and can't be swapped.
 { "id": "b5", "type": "cardio", "exerciseId": "run", "durationMin": 35, "target": "Zone 2" }
 ```
 
+**Per side** — any exercise in a `single`, `superset` or `circuit` block may set `"perSide": true` (carries,
+single-arm or single-leg work). Each set is then done and logged twice: left, a short switch, right — like
+`"sides": true` on holds. `reps` and `load` are **per side**; the switch rest is `"switchSec"` (default 10).
+Warm-up sets are done per side too. Plan time for both sides.
+```json
+{ "id": "b3", "type": "single",
+  "exercises": [{ "exerciseId": "kb-suitcase-march", "sets": 3, "reps": 10, "load": 16, "restSec": 60, "perSide": true }] }
+```
+
 Any block may have an optional `"label"` (e.g. `"Warm-up"`, `"Finisher"`) shown instead of the type.
 A `single` exercise may add `"warmupSets": 3` (optional `"warmupReps": 5`, `"warmupRestSec": 60`) —
 warm-up sets are timed and logged with `"warmup": true` but don't count toward PRs.
@@ -125,20 +134,21 @@ Equipment ids: barbell, rack, bench, dumbbells, kettlebell, cable, machine, pull
   "endedEarly": false, "sessionRpe": 8, "note": "Left knee a bit cranky on last set",
   "adjustments": [ { "type": "swap", "blockId": "b2", "from": "rdl", "to": "db-rdl", "at": "before" } ],
   "blocks": [ { "blockId": "b1", "type": "single", "title": "Back squat", "actualSec": 960,
-    "exercises": [ { "exerciseId": "back-squat", "sets": [ { "reps": 5, "load": 100 } ] } ],
+    "exercises": [ { "exerciseId": "back-squat", "sets": [ { "reps": 5, "load": 100 } ] } ],   // per-side sets add "side": "Left" | "Right"
     "timed": [], "cardio": { "exerciseId": "run", "durationSec": 2100, "distanceKm": 6.2, "avgHr": 142 } } ] }
 ```
 Adjustment types: `swap`, `sets`, `reps`, `load`, `rest`, `remove`, `add`, `reorder`, `environment`,
 `shorten-rests`, `drop-set`, `skip` (a set, hold or cardio block skipped mid-workout without logging it:
-`{ "type": "skip", "kind": "set", "exerciseId": "rdl", "setNo": 3, "at": "during" }`).
+`{ "type": "skip", "kind": "set", "exerciseId": "rdl", "setNo": 3, "at": "during" }`; a per-side set adds `"side"`).
 `at` is `before` (in the session overview) or `during` (in the workout). Timers can also be shortened or extended
 mid-workout; time added shows up in `overSec` / `restOverSec`.
 Patterns in adjustments (always cutting the same set, always swapping the same lift) are worth calling out.
 
 **Runs done outside the app.** On a session with a `cardio` block the user can log it without the workout flow.
-That writes a normal workout log with `"source": "outside"`, one `cardio` block (`durationSec`, `distanceKm`),
-`actualSec` = the run's duration, `plannedSec` = the block's `durationMin`, `sessionRpe` if given, and no adjustments
-or skips. It is dated on the session's date if that has passed, otherwise today. Timing fields (`overSec`,
+That writes a normal workout log with `"source": "outside"`: the `cardio` block (`durationSec`, `distanceKm`), plus the
+session's `hold` blocks (warm-up, cool-down) with every hold `"completed": true` — unless the user un-ticked that
+block, then `"completed": false` and `actualSec` 0. `actualSec` = the run plus the ticked holds, `plannedSec` = the run's
+`durationMin` plus the holds' planned time, `sessionRpe` if given. No adjustments or skips. It is dated on the session's date if that has passed, otherwise today. Timing fields (`overSec`,
 `pausedSec`) are 0 — don't read pacing into them.
 
 **Corrections — `supersedes`.** Logs are never edited. To fix a wrong log, the app writes a new log of the same type

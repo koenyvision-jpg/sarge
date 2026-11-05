@@ -431,3 +431,5 @@ a.btn { text-decoration: none; }
 .fix-set input { width: 76px; flex: none; padding: 8px 10px; }
 .run-fields { gap: 8px; align-items: flex-end; }
 .run-fields input { min-width: 0; width: 100%; }
+.check-row { cursor: pointer; }
+.check-row input[type=checkbox] { width: 22px; height: 22px; flex: none; accent-color: var(--accent); margin: 0; }

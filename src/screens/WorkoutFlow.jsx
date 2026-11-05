@@ -214,14 +214,15 @@ function SetView({ w, step, elapsed, over, records, onDone }) {
     : grouped
     ? `Round ${step.setNo} of ${step.setsTotal} · ${String.fromCharCode(65 + step.blockIndex % 26)}${step.exIndex + 1}`
     : `Set ${step.setNo} of ${step.setsTotal}`
+  const sideNote = step.side ? ` · ${step.side} side` : ''
 
   return (
     <>
       <div className="stack tight">
-        <div className="flow-kicker">{kicker}</div>
+        <div className="flow-kicker">{kicker}{sideNote}</div>
         <div className="flow-name">{step.label}<ExerciseInfoButton exerciseId={step.exerciseId} size="lg" /></div>
         <div className="flow-target">
-          Target: <b style={{ color: 'var(--text)' }}>{step.target.reps} reps</b>
+          Target: <b style={{ color: 'var(--text)' }}>{step.target.reps} reps{step.side ? ' this side' : ''}</b>
           {step.target.load ? ` @ ${step.target.load} kg` : ''}{step.target.rpe ? ` · RPE ${step.target.rpe}` : ''}
         </div>
         {last && <div className="flow-last">Last time: {summarizeSets(last.sets)}</div>}
@@ -295,7 +296,7 @@ function RestView({ step, remaining, total, next, w, records }) {
   const warn = remaining <= 10
   return (
     <>
-      <div className="flow-kicker">{step.kind === 'transition' ? 'Set up next station' : step.label === 'Switch' ? 'Switch' : 'Rest'}</div>
+      <div className="flow-kicker">{step.kind === 'transition' ? 'Set up next station' : step.label === 'Switch' || step.label === 'Switch sides' ? step.label : 'Rest'}</div>
       <Ring fraction={remaining / total} color={warn ? 'var(--warn)' : 'var(--info)'}>
         <div className={`flow-timer small tnum${warn ? ' warn' : ''}`}>{formatDuration(Math.ceil(remaining))}</div>
         <div className="tiny faint">of {formatDuration(total)}</div>

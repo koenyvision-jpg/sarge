@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useStore } from '../lib/store.jsx'
 import { accountability, checkinFor, fallbackOrders, scheduledSessions, timeline, unexplainedMisses } from '../lib/schedule.js'
 import { excuseLabel } from '../lib/excuses.js'
-import { paceText } from '../lib/manualLogs.js'
+import { cardioOf, paceText } from '../lib/manualLogs.js'
 import { addDays, formatDay, formatDuration, formatMinutes, parseISODate, todayISO } from '../lib/dates.js'
 import { blockTitle, estimateSessionSec } from '../lib/engine.js'
 import { CantTodaySheet, CheckInCard, ExplainYourself } from '../components/Accountability.jsx'
@@ -107,7 +107,7 @@ function SessionCard({ session: s, envName, onOpen, onCant, hideActions }) {
         </div>
         {w.source === 'outside' ? (
           <div className="small muted tnum" style={{ marginTop: 4 }}>
-            Outside the app · {w.blocks?.[0]?.cardio?.distanceKm ?? '—'} km in {formatDuration(w.actualSec)}{w.blocks?.[0]?.cardio?.distanceKm ? ` · ${paceText(w.actualSec / w.blocks[0].cardio.distanceKm)} /km` : ''}{w.sessionRpe ? ` · RPE ${w.sessionRpe}` : ''}
+            Outside the app · {cardioOf(w)?.distanceKm ?? '—'} km in {formatDuration(cardioOf(w)?.durationSec ?? w.actualSec)}{cardioOf(w)?.distanceKm ? ` · ${paceText(cardioOf(w).durationSec / cardioOf(w).distanceKm)} /km` : ''}{w.sessionRpe ? ` · RPE ${w.sessionRpe}` : ''}
           </div>
         ) : <div className="small muted tnum" style={{ marginTop: 4 }}>
           {formatDuration(w.actualSec)} vs {formatMinutes(w.plannedSec)} planned

@@ -498,6 +498,11 @@ export const EXERCISE_INFO = {
     'Swing your outside leg forward and back like a pendulum, gradually higher.',
     'Then face the wall and swing side to side. Switch legs.',
   ], ['Relaxed and rhythmic — dynamic, not a stretch-and-hold.', 'Stand tall, don\'t lean.']),
+  'kb-suitcase-march': F([
+    'Hold one kettlebell in one hand at your side, arm long, like carrying a suitcase.',
+    'Stand tall and march: drive one knee up to hip height, pause, lower it, then the other.',
+    'Stay put or walk slowly forward. Do the set, then switch hands for the other side.',
+  ], ['Don\'t lean toward or away from the bell — your obliques keep you level.', 'Ribs down, shoulders level, slow and controlled.']),
   'kb-halo': F([
     'Hold the kettlebell upside down by the horns at chest height.',
     'Circle it around your head: past one ear, behind your head, past the other ear, back to your chest.',
