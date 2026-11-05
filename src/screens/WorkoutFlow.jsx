@@ -4,7 +4,7 @@ import { useNow, useWakeLock } from '../lib/hooks.js'
 import { cues, say, unlockAudio } from '../lib/audio.js'
 import { formatClock, formatDuration } from '../lib/dates.js'
 import {
-  NAG_EVERY_SEC, advance, autoAdvances, catchUp, currentStepDuration, dropLastSet, endEarly, extendStep, goBack,
+  NAG_EVERY_SEC, adjustStep, advance, autoAdvances, catchUp, currentStepDuration, dropLastSet, endEarly, goBack, restartStep, skipStep,
   lastDroppableSetIndex, lastPerformance, overrunSec, pace, pause, resume, shortenRests, stepElapsedSec, summarizeSets,
 } from '../lib/engine.js'
 import { getExercise, loadStep, usesLoad } from '../lib/exercises.js'
@@ -27,6 +27,10 @@ export default function WorkoutFlow({ onMinimize, onDone }) {
     if (fired.current.has(key)) return
     fired.current.add(key)
     fn()
+  }
+  // Let a step's countdown beeps play again (after restart, back, or adding time).
+  const rearm = stepId => {
+    for (const k of [...fired.current]) if (k.startsWith(`${stepId}:`) && !k.endsWith(':start')) fired.current.delete(k)
   }
 
   // Drive the clock: auto-advance rests/holds, and play cues.
@@ -72,12 +76,20 @@ export default function WorkoutFlow({ onMinimize, onDone }) {
 
   const done = result => {
     unlockAudio()
-    const next = advance(w, Date.now(), result)
+    // Logging work while paused means you're back at it: resume first.
+    const t = Date.now()
+    const next = advance(w.pausedAt ? resume(w, t) : w, t, result)
     const nextStep = next.steps[next.index]
     if (!nextStep) cues.finish()
     update(next)
   }
-  const togglePause = () => update(w.pausedAt ? resume(w, Date.now()) : pause(w, Date.now()))
+  const togglePause = () => { unlockAudio(); update(w.pausedAt ? resume(w, Date.now()) : pause(w, Date.now())) }
+  const control = {
+    back: () => { const next = goBack(w, Date.now()); rearm(next.steps[next.index]?.id); update(next) },
+    restart: () => { rearm(step.id); update(restartStep(w, Date.now())) },
+    skip: () => { unlockAudio(); update(skipStep(w, Date.now())) },
+    adjust: sec => { if (sec > 0) rearm(step.id); update(adjustStep(w, Date.now(), sec)) },
+  }
 
   const blockCount = new Set(w.steps.map(s => s.blockId)).size
   const behind = p.behindSec
@@ -115,27 +127,26 @@ export default function WorkoutFlow({ onMinimize, onDone }) {
         )}
 
         <div className="flow-main">
-          {w.pausedAt ? (
-            <PausedView onResume={togglePause} pausedFor={(now - w.pausedAt) / 1000} />
-          ) : step.kind === 'set' ? (
+          {w.pausedAt && <div className="paused-pill">Paused · {formatDuration((now - w.pausedAt) / 1000)}</div>}
+          {step.kind === 'set' ? (
             <SetView key={step.id} w={w} step={step} elapsed={elapsed} over={over} records={records} onDone={done} />
           ) : step.kind === 'rest' || step.kind === 'transition' ? (
-            <RestView step={step} remaining={remaining} total={total} next={nextWork} w={w} records={records}
-              onAdd={() => update(extendStep(w, 30))} onSkip={() => done({ skipped: true })} />
+            <RestView step={step} remaining={remaining} total={total} next={nextWork} w={w} records={records} />
           ) : step.kind === 'timed' ? (
-            <TimedView step={step} remaining={remaining} total={total} onSkip={() => done({ skipped: true })} />
+            <TimedView step={step} remaining={remaining} total={total} />
           ) : (
             <CardioView key={step.id} step={step} label={w.session.blocks.find(b => b.id === step.blockId)?.label} elapsed={elapsed} total={total} onDone={done} />
           )}
         </div>
-        <div style={{ height: 'calc(var(--safe-bottom) + 16px)' }} />
+        <TimerControls countdown={step.kind !== 'set'} paused={!!w.pausedAt} remaining={total - elapsed}
+          canBack={w.index > 0} skipLabel={step.kind === 'rest' || step.kind === 'transition' ? 'Go now' : 'Skip'}
+          onToggle={togglePause} {...control} />
+        <div style={{ height: 'calc(var(--safe-bottom) + 12px)' }} />
       </div>
 
       <Sheet open={menu} onClose={() => setMenu(false)}>
         <div className="stack">
           <h2>Workout</h2>
-          <button className="btn block" onClick={() => { togglePause(); setMenu(false) }}>{w.pausedAt ? 'Resume' : 'Pause'}</button>
-          <button className="btn block" disabled={w.index === 0} onClick={() => { update(goBack(w, Date.now())); setMenu(false) }}>Back one step</button>
           <button className="btn block" onClick={() => { update(shortenRests(w)); setMenu(false) }}>Shorten remaining rests 25%</button>
           <button className="btn block" disabled={!canDrop} onClick={() => { update(dropLastSet(w)); setMenu(false) }}>Drop the last set</button>
           <button className="btn danger block" onClick={() => { update(endEarly(w, Date.now())); setMenu(false) }}>End workout now</button>
@@ -280,7 +291,7 @@ function NextCard({ next, w, records }) {
   )
 }
 
-function RestView({ step, remaining, total, next, w, records, onAdd, onSkip }) {
+function RestView({ step, remaining, total, next, w, records }) {
   const warn = remaining <= 10
   return (
     <>
@@ -290,15 +301,11 @@ function RestView({ step, remaining, total, next, w, records, onAdd, onSkip }) {
         <div className="tiny faint">of {formatDuration(total)}</div>
       </Ring>
       <NextCard next={next} w={w} records={records} />
-      <div className="row">
-        <button className="btn outline grow" onClick={onAdd}>+30s</button>
-        <button className="btn primary grow" onClick={onSkip}>Go now →</button>
-      </div>
     </>
   )
 }
 
-function TimedView({ step, remaining, total, onSkip }) {
+function TimedView({ step, remaining, total }) {
   return (
     <>
       <div className="stack tight">
@@ -309,7 +316,6 @@ function TimedView({ step, remaining, total, onSkip }) {
       <Ring fraction={remaining / total} color="var(--accent)">
         <div className="flow-timer small tnum">{formatDuration(Math.ceil(remaining))}</div>
       </Ring>
-      <button className="btn outline block" onClick={onSkip}>Skip</button>
     </>
   )
 }
@@ -340,13 +346,44 @@ function CardioView({ step, label, elapsed, total, onDone }) {
   )
 }
 
-function PausedView({ onResume, pausedFor }) {
+const ICON = {
+  back: <path d="M6 5v14M19 5 9 12l10 7z" />,
+  next: <path d="M18 5v14M5 5l10 7-10 7z" />,
+  restart: <path d="M4 12a8 8 0 1 0 2.3-5.6M4 4v4.5h4.5" />,
+  play: <path d="M7 4.5v15l12.5-7.5z" />,
+  pause: <path d="M8 5v14M16 5v14" />,
+}
+
+function CtlButton({ icon, label, big, ...props }) {
   return (
-    <>
-      <div className="flow-kicker">Paused</div>
-      <div className="flow-timer small tnum faint">{formatDuration(pausedFor)}</div>
-      <div className="center muted">The clock is stopped, but this shows up in your summary.</div>
-      <button className="btn primary block big" onClick={onResume}>Resume</button>
-    </>
+    <button type="button" className={`tbtn${big ? ' big' : ''}`} aria-label={label} {...props}>
+      <svg viewBox="0 0 24 24" fill={icon === 'play' ? 'currentColor' : 'none'} stroke="currentColor"
+        strokeWidth={icon === 'pause' ? 3.2 : 2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{ICON[icon]}</svg>
+      <span>{label}</span>
+    </button>
+  )
+}
+
+/** Transport bar under every step; the ±seconds row only on steps with a countdown. */
+function TimerControls({ countdown, paused, remaining, canBack, skipLabel, onToggle, back, restart, skip, adjust }) {
+  return (
+    <div className="timer-ctl">
+      {countdown && (
+        <div className="adj-row">
+          {[-10, -5, 5, 10].map(d => (
+            <button key={d} type="button" className="btn small outline tnum" disabled={d < 0 && remaining <= 0}
+              onClick={() => adjust(d)} aria-label={`${d > 0 ? 'Add' : 'Take off'} ${Math.abs(d)} seconds`}>
+              {d > 0 ? `+${d}` : `−${-d}`}s
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="transport">
+        <CtlButton icon="back" label="Back" disabled={!canBack} onClick={back} />
+        <CtlButton icon="restart" label="Restart" disabled={!countdown} onClick={restart} />
+        <CtlButton icon={paused ? 'play' : 'pause'} label={paused ? 'Start' : 'Pause'} big onClick={onToggle} />
+        <CtlButton icon="next" label={skipLabel} onClick={skip} />
+      </div>
+    </div>
   )
 }

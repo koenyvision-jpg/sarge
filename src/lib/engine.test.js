@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {
   parseReps, compileSession, estimateSteps, startWorkout, advance, catchUp, pace,
   overrunSec, pause, resume, dropLastSet, shortenRests, buildWorkoutRecord, findPRs,
-  extendStep, goBack, endEarly,
+  extendStep, goBack, endEarly, adjustStep, restartStep, skipStep, stepElapsedSec, currentStepDuration,
 } from './engine.js'
 import { buildSamplePlan } from './samplePlan.js'
 import { addDays, startOfWeek } from './dates.js'
@@ -132,4 +132,50 @@ test('sample plan covers 4 weeks starting Monday, and every block compiles', () 
     const sec = estimateSteps(compileSession(s))
     assert.ok(sec > 15 * 60 && sec < 100 * 60, `${s.name} estimate ${sec}s`)
   }
+})
+
+test('timer controls: ±seconds, restart and skip', () => {
+  let w = startWorkout({ session, now: 0, environment: 'gym' })
+  w = advance(w, 30_000, { reps: 5, load: 100 }) // now resting
+  assert.equal(w.steps[w.index].kind, 'rest')
+  const base = currentStepDuration(w)
+  w = adjustStep(w, 40_000, 10)
+  w = adjustStep(w, 40_000, -5)
+  assert.equal(currentStepDuration(w), base + 5)
+  // Taking off more than is left ends the rest, never goes negative.
+  w = adjustStep(w, 40_000, -9999)
+  assert.equal(currentStepDuration(w) - stepElapsedSec(w, 40_000), 0)
+  assert.equal(catchUp(w, 40_000).steps[catchUp(w, 40_000).index].kind, 'set', 'rest ends and the next set starts')
+  // Restart wipes the adjustment and starts the clock again.
+  w = restartStep(w, 50_000)
+  assert.equal(stepElapsedSec(w, 50_000), 0)
+  assert.equal(currentStepDuration(w), base)
+  // Skipping a set records it for the coach and logs no reps.
+  w = skipStep(w, 50_000) // skip the rest: not logged as a skip
+  assert.equal(w.adjustments.filter(a => a.type === 'skip').length, 0)
+  const set = w.steps[w.index]
+  w = skipStep(w, 60_000)
+  assert.deepEqual(w.adjustments.at(-1), { type: 'skip', at: 'during', exerciseId: set.exerciseId, kind: 'set', setNo: set.setNo })
+  assert.equal(w.results[set.id].skipped, true)
+})
+
+test('controls while paused keep the clock frozen and resume cleanly', () => {
+  let w = startWorkout({ session, now: 0, environment: 'gym' })
+  w = advance(w, 30_000, { reps: 5, load: 100 })
+  w = pause(w, 40_000)
+  w = restartStep(w, 100_000)
+  assert.equal(stepElapsedSec(w, 100_000), 0)
+  w = resume(w, 200_000)
+  assert.equal(stepElapsedSec(w, 205_000), 5, 'counts from the resume, not from the tap')
+  w = pause(w, 210_000)
+  w = goBack(w, 300_000)
+  w = resume(w, 400_000)
+  assert.equal(w.index, 0)
+  assert.equal(stepElapsedSec(w, 401_000), 1)
+})
+
+test('skips read well in the summary', async () => {
+  const { describeAdjustment } = await import('./adjust.js')
+  assert.equal(describeAdjustment({ type: 'skip', kind: 'set', exerciseId: 'back-squat', setNo: 3 }), 'Skipped set 3 of Back squat')
+  assert.equal(describeAdjustment({ type: 'skip', kind: 'timed', exerciseId: 'side-plank', setNo: 2, side: 'Left' }), 'Skipped Side plank (left side), round 2')
 })

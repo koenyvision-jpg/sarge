@@ -239,7 +239,7 @@ export function advance(state, now, result = {}) {
       ...result,
       actualSec,
       overSec: Math.round(over),
-      extendedSec: state.stepExtraSec || 0,
+      extendedSec: Math.round(state.stepExtraSec || 0),
       endedAt: now,
     },
   }
@@ -289,6 +289,36 @@ export function extendStep(state, sec = 30) {
   return { ...state, stepExtraSec: (state.stepExtraSec || 0) + sec }
 }
 
+/** Add (+) or take off (−) seconds on the current timer. Never below what has already run:
+ *  taking off more than is left ends the step (rests and holds then advance on their own). */
+export function adjustStep(state, now, sec) {
+  const step = state.steps[state.index]
+  if (!step) return state
+  const minExtra = stepElapsedSec(state, now) - stepDuration(step, state.restScale)
+  return { ...state, stepExtraSec: Math.max(minExtra, (state.stepExtraSec || 0) + sec) }
+}
+
+/** Start the current step's timer over, dropping any time added or taken off. Stays paused if paused. */
+export function restartStep(state, now) {
+  return { ...state, stepStartedAt: clockOf(state, now), stepExtraSec: 0 }
+}
+
+/** Move on without logging. Skipped work is noted in the adjustments so the coach sees it. */
+export function skipStep(state, now) {
+  const step = state.steps[state.index]
+  if (!step) return state
+  const work = ['set', 'timed', 'cardio'].includes(step.kind)
+  const next = advance(state, clockOf(state, now), { skipped: true })
+  if (!work) return next
+  return {
+    ...next,
+    adjustments: [...next.adjustments, {
+      type: 'skip', at: 'during', exerciseId: step.exerciseId, kind: step.kind,
+      ...(step.setNo ? { setNo: step.setNo } : {}), ...(step.side ? { side: step.side } : {}),
+    }],
+  }
+}
+
 export function shortenRests(state, factor = 0.75) {
   return {
     ...state,
@@ -304,7 +334,7 @@ export function goBack(state, now) {
   if (i < 0) return state
   const results = { ...state.results }
   for (let k = i; k < state.steps.length; k++) delete results[state.steps[k].id]
-  return { ...state, index: i, stepStartedAt: now, stepExtraSec: 0, results, finishedAt: null }
+  return { ...state, index: i, stepStartedAt: clockOf(state, now), stepExtraSec: 0, results, finishedAt: null }
 }
 
 /** The last remaining working set of the session's last strength block, or -1. */
@@ -361,8 +391,10 @@ export function buildWorkoutRecord(state, { sessionRpe = null, note = '' } = {})
     const entry = byBlock.get(step.blockId)
     if (!r) continue
     entry.actualSec += r.actualSec || 0
-    overSec += (r.overSec || 0) + (r.extendedSec || 0)
-    restOverSec += step.kind === 'rest' || step.kind === 'transition' ? (r.extendedSec || 0) : 0
+    // Time added to a timer counts against you; time taken off doesn't cancel out slow sets.
+    const extended = Math.max(0, r.extendedSec || 0)
+    overSec += (r.overSec || 0) + extended
+    restOverSec += step.kind === 'rest' || step.kind === 'transition' ? extended : 0
     if (step.kind === 'set' && !r.skipped) {
       let ex = entry.exercises.find(e => e.exerciseId === step.exerciseId)
       if (!ex) entry.exercises.push(ex = { exerciseId: step.exerciseId, sets: [] })

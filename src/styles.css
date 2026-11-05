@@ -412,3 +412,16 @@ button.list-row:active { background: var(--surface-2); }
 .list-row.pick-row > button.grow { padding: 13px 0 13px 14px; text-align: left; align-self: stretch; }
 .list-row.pick-row > button.grow:active { background: var(--surface-2); }
 a.btn { text-decoration: none; }
+
+/* Workout timer controls */
+.timer-ctl { display: grid; gap: 12px; padding: 14px var(--gutter) 0; }
+.adj-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.transport { display: flex; align-items: flex-start; justify-content: space-between; }
+.tbtn { display: grid; justify-items: center; gap: 4px; width: 64px; color: var(--text); font-size: 11px; font-weight: 700; letter-spacing: 0.3px; color: var(--text-2); }
+.tbtn svg { width: 52px; height: 52px; padding: 14px; border-radius: 50%; background: var(--surface-2); color: var(--text); box-sizing: border-box; }
+.tbtn:active svg { background: var(--surface-3); }
+.tbtn.big svg { width: 68px; height: 68px; padding: 18px; background: var(--accent); color: #111; }
+.tbtn.big:active svg { background: var(--accent-press); }
+.tbtn:disabled { opacity: 0.3; }
+.paused-pill { align-self: center; padding: 6px 14px; border-radius: 999px; background: var(--warn-soft); color: var(--warn); font-size: 13px; font-weight: 800; letter-spacing: 0.6px; text-transform: uppercase; font-variant-numeric: tabular-nums; }
+.tbtn.big { width: 76px; }

@@ -121,7 +121,10 @@ Equipment ids: barbell, rack, bench, dumbbells, kettlebell, cable, machine, pull
     "timed": [], "cardio": { "exerciseId": "run", "durationSec": 2100, "distanceKm": 6.2, "avgHr": 142 } } ] }
 ```
 Adjustment types: `swap`, `sets`, `reps`, `load`, `rest`, `remove`, `add`, `reorder`, `environment`,
-`shorten-rests`, `drop-set`. `at` is `before` (in the session overview) or `during` (in the workout).
+`shorten-rests`, `drop-set`, `skip` (a set, hold or cardio block skipped mid-workout without logging it:
+`{ "type": "skip", "kind": "set", "exerciseId": "rdl", "setNo": 3, "at": "during" }`).
+`at` is `before` (in the session overview) or `during` (in the workout). Timers can also be shortened or extended
+mid-workout; time added shows up in `overSec` / `restOverSec`.
 Patterns in adjustments (always cutting the same set, always swapping the same lift) are worth calling out.
 
 `logs/YYYY-MM-DD-checkin.json` — 1–5 scales (5 = best for sleep/energy, 5 = worst for soreness/stress)

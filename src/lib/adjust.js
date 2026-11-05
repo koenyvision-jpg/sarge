@@ -161,6 +161,9 @@ export function describeAdjustment(a) {
     case 'environment': return `Switched location ${a.from} → ${a.to}`
     case 'shorten-rests': return 'Shortened rests mid-workout'
     case 'drop-set': return `Dropped set ${a.setNo} of ${name(a.exerciseId)}`
+    case 'skip': return a.kind === 'set'
+      ? `Skipped set ${a.setNo} of ${name(a.exerciseId)}`
+      : `Skipped ${name(a.exerciseId)}${a.side ? ` (${a.side.toLowerCase()} side)` : ''}${a.kind === 'timed' && a.setNo ? `, round ${a.setNo}` : ''}`
     default: return `${a.exerciseId ? name(a.exerciseId) + ' ' : ''}${a.field}: ${a.from ?? '—'} → ${a.to ?? '—'}`
   }
 }
