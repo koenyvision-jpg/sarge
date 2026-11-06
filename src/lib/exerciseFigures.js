@@ -82,6 +82,23 @@ export const FIGURES = {
     { label: 'Back', head: [100, 24], neck: [100, 36], hip: [100, 80], arms: [[[110, 58], [100, 78]], [[96, 58], [92, 78]]], legs: [[[86, 106], [70, 132]], [[100, 110], [100, 140]]] },
     { label: 'Forward', head: [100, 24], neck: [100, 36], hip: [100, 80], arms: [[[110, 58], [100, 78]], [[96, 58], [92, 78]]], legs: [[[126, 96], [154, 108]], [[100, 110], [100, 140]]] },
   ],
+  'kb-squat-rotation-uppercut': [
+    {
+      label: 'Squat', ...FRONT_BODY(26), kb: { at: [100, 130] }, kbFront: true,
+      arms: [[[90, 98], [97, 121]], [[110, 98], [103, 121]]],
+      legs: [[[78, 124], [84, 140]], [[122, 124], [116, 140]]],
+    },
+    {
+      label: 'Drive & rotate', ...FRONT_BODY(10), shoulders: [[88, 58], [114, 60]], kb: { at: [118, 96] }, kbFront: true,
+      arms: [[[100, 78], [113, 88]], [[118, 76], [120, 88]]],
+      legs: [[[88, 118], [90, 140]], [[112, 118], [110, 140]]],
+    },
+    {
+      label: 'Uppercut', ...FRONT_BODY(), shoulders: [[90, 48], [114, 50]], kb: { at: [124, 30], flip: true }, kbFront: true,
+      arms: [[[106, 62], [120, 40]], [[124, 62], [126, 40]]],
+      legs: [[[92, 114], [96, 140]], [[108, 114], [110, 140]]],
+    },
+  ],
   'kb-suitcase-march': [
     {
       label: 'Stand tall', ...FRONT_BODY(), kb: { at: [80, 104] }, kbFront: true,

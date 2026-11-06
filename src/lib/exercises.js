@@ -28,6 +28,8 @@ export const EXERCISES = [
   ex('front-squat', 'Front squat', 'squat', ['barbell', 'rack'], 'strength', ['quads']),
   ex('goblet-squat', 'Goblet squat', 'squat', ['dumbbells'], 'strength', ['quads', 'glutes']),
   ex('kb-goblet-squat', 'Kettlebell goblet squat', 'squat', ['kettlebell'], 'strength', ['quads', 'glutes']),
+  // sided: worked one side at a time, so it runs per side even if the plan doesn't say perSide.
+  { ...ex('kb-squat-rotation-uppercut', 'Squat rotation to uppercut', 'squat', ['kettlebell'], 'strength', ['quads', 'glutes', 'core', 'shoulders']), sided: true },
   ex('kb-front-squat', 'Kettlebell front squat', 'squat', ['kettlebell'], 'strength', ['quads', 'glutes']),
   ex('leg-press', 'Leg press', 'squat', ['machine'], 'strength', ['quads', 'glutes']),
   ex('band-squat', 'Banded squat', 'squat', ['bands'], 'strength', ['quads']),
@@ -108,7 +110,7 @@ export const EXERCISES = [
   // Carry
   ex('farmer-carry', "Farmer's carry", 'carry', ['dumbbells'], 'strength', ['grip', 'core']),
   ex('kb-carry', 'Kettlebell carry', 'carry', ['kettlebell'], 'strength', ['grip', 'core']),
-  ex('kb-suitcase-march', 'Kettlebell suitcase march', 'carry', ['kettlebell'], 'strength', ['core', 'grip']),
+  { ...ex('kb-suitcase-march', 'Kettlebell suitcase march', 'carry', ['kettlebell'], 'strength', ['core', 'grip']), sided: true },
   // Cardio
   ex('run', 'Run', 'cardio', [], 'cardio'),
   ex('treadmill-run', 'Treadmill run', 'cardio', ['treadmill'], 'cardio'),

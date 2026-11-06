@@ -14,7 +14,7 @@ Both sides MUST follow these formats. The app validates what it reads; anything 
 | `coach/brief.md`, `coach/principles.md`, `coach/notes.md` | Coach | Goals, training rules, coach memory. |
 | `coach/feed/*.md` | Coach | Messages, debriefs, reviews (append-only, `YYYY-MM-DD-HHMM-<slug>.md`). |
 | `environments.json` | App | Locations and their equipment. |
-| `exercises.json` | App | The exercise library: every valid `exerciseId`, its movement pattern and the equipment it needs. Equipment also listed in `optionalEquipment` is nice to have but not required. |
+| `exercises.json` | App | The exercise library: every valid `exerciseId`, its movement pattern and the equipment it needs. Equipment also listed in `optionalEquipment` is nice to have but not required. `sided: true` = worked one side at a time. |
 | `SCHEMA.md` | App | This file. |
 | `logs/*.json` | App | Workouts, check-ins, missed sessions (plus old reschedules). Append-only — never edit or delete. |
 | `inbox/*.json` | App | Messages and excuses for the coach. Coach answers in `coach/feed/`. |
@@ -102,6 +102,8 @@ Unknown ids still work but show a generated name and can't be swapped.
 single-arm or single-leg work). Each set is then done and logged twice: left, a short switch, right — like
 `"sides": true` on holds. `reps` and `load` are **per side**; the switch rest is `"switchSec"` (default 10).
 Warm-up sets are done per side too. Plan time for both sides.
+Exercises marked `"sided": true` in `exercises.json` (e.g. `kb-squat-rotation-uppercut`, `kb-suitcase-march`) are
+one-side-at-a-time moves: the app runs them per side even without `perSide`. Set `"perSide": false` to override.
 ```json
 { "id": "b3", "type": "single",
   "exercises": [{ "exerciseId": "kb-suitcase-march", "sets": 3, "reps": 10, "load": 16, "restSec": 60, "perSide": true }] }

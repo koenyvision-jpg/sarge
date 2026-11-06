@@ -498,6 +498,12 @@ export const EXERCISE_INFO = {
     'Swing your outside leg forward and back like a pendulum, gradually higher.',
     'Then face the wall and swing side to side. Switch legs.',
   ], ['Relaxed and rhythmic — dynamic, not a stretch-and-hold.', 'Stand tall, don\'t lean.']),
+  'kb-squat-rotation-uppercut': F([
+    'Feet a bit wider than shoulders. Squat down and hold the kettlebell by the horns, low between your legs, back flat.',
+    'Stand up hard and drive the bell up and across your body, rotating through your hips and upper back. Pivot on the back foot.',
+    'Finish with the bell at shoulder height on the working side, like an uppercut. Lower it under control back into the squat.',
+    'Do all reps to one side, then switch.',
+  ], ['The power comes from your legs and hips, not your arms.', 'Pivot the back foot so knee and hip turn together — don\'t twist through your lower back.', 'Flat back at the bottom. Control the bell down, don\'t let it drop.']),
   'kb-suitcase-march': F([
     'Hold one kettlebell in one hand at your side, arm long, like carrying a suitcase.',
     'Stand tall and march: drive one knee up to hip height, pause, lower it, then the other.',

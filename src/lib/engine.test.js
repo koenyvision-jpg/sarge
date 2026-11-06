@@ -218,3 +218,11 @@ test('perSide: each set is left, switch, right — in single, superset and circu
   const dropped = dropLastSet(fresh)
   assert.deepEqual(dropped.steps.map(s => s.kind + (s.side ? ':' + s.side : '')), ['set:Left', 'rest', 'set:Right'])
 })
+
+test('sided exercises run per side unless the plan says perSide: false', async () => {
+  const { compileSession } = await import('./engine.js')
+  const sess = perSide => ({ id: 's', name: 'x', transitionSec: 0, blocks: [{ id: 'b', type: 'single',
+    exercises: [{ exerciseId: 'kb-squat-rotation-uppercut', sets: 1, reps: 10, ...(perSide === undefined ? {} : { perSide }) }] }] })
+  assert.deepEqual(compileSession(sess()).filter(s => s.kind === 'set').map(s => s.side), ['Left', 'Right'])
+  assert.deepEqual(compileSession(sess(false)).filter(s => s.kind === 'set').map(s => s.side), [undefined])
+})

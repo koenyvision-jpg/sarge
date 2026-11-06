@@ -36,6 +36,9 @@ export function blockTitle(block) {
   }
 }
 
+/** Done one side at a time: the plan's `perSide`, else the exercise's own `sided` flag. */
+export const isPerSide = e => e?.perSide ?? !!getExercise(e?.exerciseId).sided
+
 /** Compile a session into steps. Each block is preceded by a transition (except the first). */
 export function compileSession(session) {
   const steps = []
@@ -49,7 +52,7 @@ export function compileSession(session) {
     }
     // One set of an exercise; with `perSide` that's the left side, a short switch, then the right side.
     const sets = (e, setNo, setsTotal, exIndex, extra = {}) => {
-      if (!e.perSide) return steps.push({ ...setStep(base, id(), e, setNo, setsTotal, exIndex), ...extra })
+      if (!isPerSide(e)) return steps.push({ ...setStep(base, id(), e, setNo, setsTotal, exIndex), ...extra })
       steps.push({ ...setStep(base, id(), e, setNo, setsTotal, exIndex), ...extra, side: 'Left' })
       rest(e.switchSec ?? 10, 'Switch sides')
       steps.push({ ...setStep(base, id(), e, setNo, setsTotal, exIndex), ...extra, side: 'Right' })

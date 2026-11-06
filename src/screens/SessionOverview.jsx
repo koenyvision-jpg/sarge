@@ -3,7 +3,7 @@ import { useStore } from '../lib/store.jsx'
 import { useNow } from '../lib/hooks.js'
 import { unlockAudio } from '../lib/audio.js'
 import { formatClock, formatDay, formatDuration, todayISO } from '../lib/dates.js'
-import { estimateByBlock, estimateSessionSec, lastPerformance, summarizeSets } from '../lib/engine.js'
+import { estimateByBlock, estimateSessionSec, isPerSide, lastPerformance, summarizeSets } from '../lib/engine.js'
 import {
   EXERCISES, alternativesFor, equipmentLabel, equipmentSummary, getExercise, isAvailable, loadStep, missingEquipment, usesLoad,
 } from '../lib/exercises.js'
@@ -159,7 +159,7 @@ export default function SessionOverview({ session, onClose, onStart }) {
 function prescription(e) {
   const parts = [`${e.sets ? `${e.sets}×` : ''}${e.reps}`]
   if (e.load) parts[0] += ` @ ${e.load} kg`
-  if (e.perSide) parts[0] += ' each side'
+  if (isPerSide(e)) parts[0] += ' each side'
   if (e.rpe) parts.push(`RPE ${e.rpe}`)
   if (e.warmupSets) parts.push(`+${e.warmupSets} warm-up`)
   return parts.join(' · ')
