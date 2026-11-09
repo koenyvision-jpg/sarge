@@ -1,6 +1,7 @@
 // Exercise library. `pattern` drives swaps; `equipment` is what the exercise needs
 // (empty = bodyweight). Equipment also listed in `optionalEquipment` is nice to have but
-// never blocks the exercise. The coach can reference any id here from plan/current.json.
+// never blocks the exercise. `sided`: worked one side at a time. `use`: a hint for the coach on
+// what the exercise is for. The coach can reference any id here from plan/current.json.
 
 export const EQUIPMENT = [
   { id: 'barbell', label: 'Barbell' },
@@ -29,6 +30,7 @@ export const EXERCISES = [
   ex('goblet-squat', 'Goblet squat', 'squat', ['dumbbells'], 'strength', ['quads', 'glutes']),
   ex('kb-goblet-squat', 'Kettlebell goblet squat', 'squat', ['kettlebell'], 'strength', ['quads', 'glutes']),
   // sided: worked one side at a time, so it runs per side even if the plan doesn't say perSide.
+  { ...ex('kb-squat-swing', 'Kettlebell squat swing (wide stance)', 'squat', ['kettlebell'], 'strength', ['quads', 'glutes', 'adductors']), use: 'Warm-up for squats' },
   { ...ex('kb-squat-rotation-uppercut', 'Squat rotation to uppercut', 'squat', ['kettlebell'], 'strength', ['quads', 'glutes', 'core', 'shoulders']), sided: true },
   ex('kb-front-squat', 'Kettlebell front squat', 'squat', ['kettlebell'], 'strength', ['quads', 'glutes']),
   ex('leg-press', 'Leg press', 'squat', ['machine'], 'strength', ['quads', 'glutes']),
@@ -40,11 +42,13 @@ export const EXERCISES = [
   ex('rdl', 'Romanian deadlift', 'hinge', ['barbell'], 'strength', ['hamstrings', 'glutes']),
   ex('db-rdl', 'Dumbbell RDL', 'hinge', ['dumbbells'], 'strength', ['hamstrings', 'glutes']),
   ex('kb-swing', 'Kettlebell swing', 'hinge', ['kettlebell'], 'strength', ['glutes', 'hamstrings']),
+  { ...ex('kb-single-arm-swing', 'One-arm kettlebell swing', 'hinge', ['kettlebell'], 'strength', ['glutes', 'hamstrings', 'core', 'grip']), sided: true, use: 'Anti-rotation core work' },
   ex('kb-rdl', 'Kettlebell Romanian deadlift', 'hinge', ['kettlebell'], 'strength', ['hamstrings', 'glutes']),
   ex('hip-thrust', 'Hip thrust', 'hinge', ['barbell', 'bench'], 'strength', ['glutes']),
   ex('band-good-morning', 'Banded good morning', 'hinge', ['bands'], 'strength', ['hamstrings']),
   ex('sl-rdl-bw', 'Single-leg RDL (bodyweight)', 'hinge', [], 'strength', ['hamstrings', 'glutes']),
   ex('glute-bridge', 'Glute bridge', 'hinge', [], 'strength', ['glutes']),
+  { ...ex('sl-glute-bridge', 'Single-leg glute bridge', 'hinge', [], 'strength', ['glutes', 'hamstrings']), sided: true, use: 'Warm-up for squats and deadlifts, usually 15–20 reps per side' },
   // Lunge
   ex('bulgarian-split-squat', 'Bulgarian split squat', 'lunge', ['dumbbells', 'bench'], 'strength', ['quads', 'glutes']),
   ex('db-walking-lunge', 'Dumbbell walking lunge', 'lunge', ['dumbbells'], 'strength', ['quads', 'glutes']),

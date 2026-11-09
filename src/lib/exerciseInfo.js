@@ -81,6 +81,11 @@ export const EXERCISE_INFO = {
     'Snap your hips forward hard — the hips throw the bell, your arms just guide it to chest height.',
     'Let it fall back between your legs, hinging at the hips, and repeat.',
   ], ['It\'s a hinge, not a squat, and not a front raise.', 'Stand tall and squeeze your glutes at the top. Photo shows the one-arm version.']),
+  'kb-single-arm-swing': I('One-Arm_Kettlebell_Swings', [
+    'Bell a step in front of you. Hinge and grab the handle with one hand, free arm out to the side or loose by your hip.',
+    'Hike it back between your legs, then snap your hips forward — the bell floats to chest height.',
+    'Let it fall back, hinging at the hips. Do all reps with one hand, then switch.',
+  ], ['Square shoulders and hips — don\'t let the bell twist you. That\'s the core work.', 'Pull the working shoulder down and back; the arm is just a rope.']),
   'hip-thrust': I('Barbell_Hip_Thrust', [
     'Sit with your upper back against a bench, barbell (padded) over your hips, feet flat, knees bent.',
     'Drive through your heels and lift your hips until your body is flat from knees to shoulders.',
@@ -96,6 +101,12 @@ export const EXERCISE_INFO = {
     'Hinge forward, your free leg extending straight behind you, until your body is roughly parallel to the floor.',
     'Return to standing by driving your hip forward.',
   ], ['Keep your hips square — don\'t let the free hip open up.', 'Slow and controlled; touch a wall for balance if needed. Photo shows it with a kettlebell.']),
+  'sl-glute-bridge': F([
+    'Lie on your back, knees bent, feet flat and close to your glutes, arms on the floor by your sides.',
+    'Lift one foot and straighten that leg, thighs level.',
+    'Drive through the heel of the foot on the floor and lift your hips until you\'re straight from knee to shoulder.',
+    'Squeeze your glutes and hold for 1 second, then lower. Do all reps, then switch legs.',
+  ], ['Keep your hips level — don\'t let the free side drop.', 'Ribs down; lift with the glute, not by arching your back.', 'Feel it in the hamstring instead? Move the foot a bit closer.']),
   'glute-bridge': I('Butt_Lift_Bridge', [
     'Lie on your back, knees bent, feet flat and close to your glutes, arms by your sides.',
     'Drive through your heels and lift your hips until your body is straight from knees to shoulders.',
@@ -498,6 +509,12 @@ export const EXERCISE_INFO = {
     'Swing your outside leg forward and back like a pendulum, gradually higher.',
     'Then face the wall and swing side to side. Switch legs.',
   ], ['Relaxed and rhythmic — dynamic, not a stretch-and-hold.', 'Stand tall, don\'t lean.']),
+  'kb-squat-swing': F([
+    'Feet wider than a normal swing, toes turned out. Bell on the floor between your feet.',
+    'Squat down with a flat back, grab the handle with both hands and hike it back between your legs.',
+    'Stand up hard through your legs and hips. The bell floats to chest height, arms straight.',
+    'Let it fall back between your legs and sit back into the squat with it. Repeat.',
+  ], ['More knee bend and a more upright chest than a normal hinge swing.', 'Knees push out over your toes as you sit down.', 'Arms just guide the bell — the legs throw it.']),
   'kb-squat-rotation-uppercut': F([
     'Feet a bit wider than shoulders. Squat down and hold the kettlebell by the horns, low between your legs, back flat.',
     'Stand up hard and drive the bell up and across your body, rotating through your hips and upper back. Pivot on the back foot.',
