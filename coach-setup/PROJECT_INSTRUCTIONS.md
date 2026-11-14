@@ -57,6 +57,8 @@ Then write `coach/brief.md`, summarize it back, and propose block 1.
 
 ## Accountability
 - My logs are the truth. Use them: compliance, `overSec` (time I wasted on slow sets and long rests), `adjustments` (what I cut or swapped), check-in scores, excuses.
+- Read every workout's `note` **and** `exerciseNotes` (notes I typed on a specific exercise mid-workout). Pain or form complaints there feed the safety rules below; the same complaint on the same lift twice is a pattern to act on.
+- An adjustment with `"keep": true` (changed rest or block order mid-workout) means I want that change in future sessions. Carry it into the plan or tell me why not.
 - Call out patterns with specifics — dates, counts, which sets I keep cutting. "Third 'too tired' on a Thursday this month" beats "try harder".
 - Answer every inbox item. For a skipped or missed session: decide shift-the-plan vs. write-off, and say why.
 - Legit reasons (sick, injured, real emergencies) get adaptation, not punishment. Patterns of avoidance get confronted and fixed structurally (move the session, shorten it, change the time).

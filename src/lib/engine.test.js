@@ -4,6 +4,7 @@ import {
   parseReps, compileSession, estimateSteps, startWorkout, advance, catchUp, pace,
   overrunSec, pause, resume, dropLastSet, shortenRests, buildWorkoutRecord, findPRs,
   extendStep, goBack, endEarly, adjustStep, restartStep, skipStep, stepElapsedSec, currentStepDuration,
+  setExerciseNote, noteTarget, setBlockRest, reorderBlocks, movableBlockIds, setKeepEdits, mainRest,
 } from './engine.js'
 import { buildSamplePlan } from './samplePlan.js'
 import { addDays, startOfWeek } from './dates.js'
@@ -225,4 +226,103 @@ test('sided exercises run per side unless the plan says perSide: false', async (
     exercises: [{ exerciseId: 'kb-squat-rotation-uppercut', sets: 1, reps: 10, ...(perSide === undefined ? {} : { perSide }) }] }] })
   assert.deepEqual(compileSession(sess()).filter(s => s.kind === 'set').map(s => s.side), ['Left', 'Right'])
   assert.deepEqual(compileSession(sess(false)).filter(s => s.kind === 'set').map(s => s.side), [undefined])
+})
+
+// Log every step up to (not including) step `i`, one second each.
+const runTo = (w, i) => {
+  while (w.index < i) w = advance(w, (w.index + 1) * 1000, w.steps[w.index].kind === 'set' ? { reps: 5, load: 50 } : {})
+  return w
+}
+const fourBlocks = { ...session, blocks: [...session.blocks, { id: 'd', type: 'single', exercises: [{ exerciseId: 'push-up', sets: 2, reps: 10, restSec: 60 }] }] }
+
+test('exercise notes: set, clear, follow the exercise during rests, and land in the log', () => {
+  let w = startWorkout({ session, now: 0, environment: 'gym' })
+  assert.equal(noteTarget(w).exerciseId, 'back-squat')
+  w = advance(w, 30_000, { reps: 5, load: 100 }) // resting: the note is still about the squat
+  assert.equal(w.steps[w.index].kind, 'rest')
+  assert.equal(noteTarget(w).exerciseId, 'back-squat')
+  w = setExerciseNote(w, 'a', 'back-squat', 'Left knee cranky')
+  w = setExerciseNote(w, 'b', 'push-up', 'Wrists fine')
+  w = setExerciseNote(w, 'b', 'db-row', 'temp')
+  w = setExerciseNote(w, 'b', 'db-row', '  ')
+  w = endEarly(w, 60_000)
+  const rec = buildWorkoutRecord(w)
+  assert.deepEqual(rec.exerciseNotes, [
+    { blockId: 'a', exerciseId: 'back-squat', text: 'Left knee cranky' },
+    { blockId: 'b', exerciseId: 'push-up', text: 'Wrists fine' },
+  ])
+})
+
+test('changing a block rest mid-workout touches only rests not yet done, and is logged once', () => {
+  let w = startWorkout({ session, now: 0, environment: 'gym' })
+  w = advance(w, 30_000, { reps: 5, load: 100 }) // in squat rest 1 of 2
+  const rests = () => w.steps.filter(s => s.blockId === 'a' && s.kind === 'rest').map(s => s.durationSec)
+  w = setBlockRest(w, 'a', 90)
+  w = setBlockRest(w, 'a', 75)
+  assert.deepEqual(rests(), [75, 75], 'the running rest changes too')
+  assert.equal(currentStepDuration(w), 75)
+  assert.equal(mainRest(w.session.blocks[0]).sec, 75)
+  assert.deepEqual(w.adjustments, [{ type: 'rest', blockId: 'a', exerciseId: 'back-squat', field: 'restSec', from: 120, to: 75, at: 'during' }])
+  // Superset: the rest after each round changes, the switch between moves doesn't.
+  w = setBlockRest(w, 'b', 45)
+  const b = w.steps.filter(s => s.blockId === 'b' && s.kind === 'rest')
+  assert.deepEqual(b.map(s => [s.restField, s.durationSec]), [['restBetweenSec', 15], ['restSec', 45], ['restBetweenSec', 15]])
+  // Back to the original value: nothing to report.
+  w = setBlockRest(w, 'a', 120)
+  assert.deepEqual(w.adjustments.map(a => a.blockId), ['b'])
+  // Done rests keep their time.
+  w = runTo(w, w.steps.findIndex(s => s.blockId === 'b'))
+  w = setBlockRest(w, 'a', 30)
+  assert.equal(w.steps[1].durationSec, 120)
+})
+
+test('reordering keeps logged and running blocks in place and only moves blocks not started', () => {
+  let w = startWorkout({ session: fourBlocks, now: 0, environment: 'gym' })
+  w = advance(w, 30_000, { reps: 5, load: 100 })
+  assert.deepEqual(movableBlockIds(w), ['b', 'c', 'd'])
+  const logged = { ...w.results }
+  w = reorderBlocks(w, ['d', 'b', 'c'])
+  assert.deepEqual(w.session.blocks.map(b => b.id), ['a', 'd', 'b', 'c'])
+  assert.deepEqual([...new Set(w.steps.map(s => s.blockId))], ['a', 'd', 'b', 'c'])
+  assert.deepEqual(w.steps.filter(s => s.blockId === 'd').map(s => s.blockIndex), [1, 1, 1, 1])
+  assert.equal(w.steps.find(s => s.blockId === 'd').kind, 'transition')
+  assert.deepEqual(w.results, logged)
+  assert.equal(w.steps[w.index].blockId, 'a', 'still resting in the squat block')
+  assert.deepEqual(w.adjustments, [{ type: 'reorder', from: ['a', 'b', 'c', 'd'], to: ['a', 'd', 'b', 'c'], at: 'during' }])
+  // Moving back to the planned order clears the adjustment.
+  w = reorderBlocks(w, ['b', 'c', 'd'])
+  assert.deepEqual(w.adjustments, [])
+})
+
+test('during a transition the block being set up can still move; once started it is locked', () => {
+  let w = startWorkout({ session: fourBlocks, now: 0, environment: 'gym' })
+  w = runTo(w, w.steps.findIndex(s => s.kind === 'transition'))
+  assert.equal(w.steps[w.index].blockId, 'b')
+  assert.deepEqual(movableBlockIds(w), ['b', 'c', 'd'])
+  w = reorderBlocks(w, ['c', 'b', 'd'])
+  assert.equal(w.steps[w.index].kind, 'transition')
+  assert.equal(w.steps[w.index].blockId, 'c', 'now setting up the hold instead')
+  w = advance(w, 999_000)
+  assert.deepEqual(movableBlockIds(w), ['b', 'd'])
+  assert.equal(reorderBlocks(w, ['c', 'd', 'b']).session.blocks.map(b => b.id).join(), 'a,c,d,b', 'c is locked, the rest moves')
+})
+
+test('reordering keeps a dropped set dropped', () => {
+  let w = startWorkout({ session: fourBlocks, now: 0, environment: 'gym' })
+  w = dropLastSet(w) // last push-up set of block d
+  const dSets = w.steps.filter(s => s.blockId === 'd' && s.kind === 'set').length
+  w = reorderBlocks(w, ['d'])
+  assert.equal(w.steps.filter(s => s.blockId === 'd' && s.kind === 'set').length, dSets)
+  assert.equal(w.steps.length, startWorkout({ session: fourBlocks, now: 0 }).steps.length - 2)
+})
+
+test('keep-for-future marks mid-workout rest and order edits only', () => {
+  let w = startWorkout({ session: fourBlocks, now: 0, environment: 'gym' })
+  w = shortenRests(w)
+  w = setBlockRest(w, 'a', 90)
+  w = setKeepEdits(w, true)
+  w = reorderBlocks(w, ['c', 'b', 'd'])
+  assert.deepEqual(w.adjustments.map(a => [a.type, !!a.keep]), [['shorten-rests', false], ['rest', true], ['reorder', true]])
+  w = setKeepEdits(w, false)
+  assert.ok(w.adjustments.every(a => !a.keep))
 })

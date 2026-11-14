@@ -47,14 +47,15 @@ export function compileSession(session) {
     let n = 0
     const id = () => `${block.id}:${n++}`
     const base = { blockId: block.id, blockIndex }
-    const rest = (durationSec, label = 'Rest') => {
-      if (durationSec > 0) steps.push({ ...base, id: id(), kind: 'rest', durationSec, label })
+    // `restField` names the plan field the rest comes from, so it can be edited mid-workout.
+    const rest = (durationSec, label = 'Rest', restField = 'restSec') => {
+      if (durationSec > 0) steps.push({ ...base, id: id(), kind: 'rest', durationSec, label, restField })
     }
     // One set of an exercise; with `perSide` that's the left side, a short switch, then the right side.
     const sets = (e, setNo, setsTotal, exIndex, extra = {}) => {
       if (!isPerSide(e)) return steps.push({ ...setStep(base, id(), e, setNo, setsTotal, exIndex), ...extra })
       steps.push({ ...setStep(base, id(), e, setNo, setsTotal, exIndex), ...extra, side: 'Left' })
-      rest(e.switchSec ?? 10, 'Switch sides')
+      rest(e.switchSec ?? 10, 'Switch sides', 'switchSec')
       steps.push({ ...setStep(base, id(), e, setNo, setsTotal, exIndex), ...extra, side: 'Right' })
     }
 
@@ -71,7 +72,7 @@ export function compileSession(session) {
         for (let r = 1; r <= rounds; r++) {
           exs.forEach((e, i) => {
             sets(e, r, rounds, i)
-            if (i < exs.length - 1) rest(between, 'Switch')
+            if (i < exs.length - 1) rest(between, 'Switch', 'restBetweenSec')
           })
           if (r < rounds) rest(block.restSec ?? 90)
         }
@@ -104,7 +105,7 @@ export function compileSession(session) {
             durationSec: item.holdSec || 30, side, setNo: r, setsTotal: rounds,
             label: getExercise(item.exerciseId).name, target: side ? `${side} side` : 'Hold',
           })
-          if (i < holds.length - 1) rest(block.restBetweenSec ?? 10, 'Switch')
+          if (i < holds.length - 1) rest(block.restBetweenSec ?? 10, 'Switch', 'restBetweenSec')
         })
         break
       }
@@ -123,7 +124,7 @@ export function compileSession(session) {
         for (let k = 1; k <= warm; k++) {
           const reps = e.warmupReps ?? 5
           sets(e, k, warm, 0, { warmup: true, target: { reps, load: null, rpe: null }, expectedSec: expectedSetSec(reps) })
-          rest(e.warmupRestSec ?? 60)
+          rest(e.warmupRestSec ?? 60, 'Rest', 'warmupRestSec')
         }
         const total = e.sets || 3
         for (let k = 1; k <= total; k++) {
@@ -189,6 +190,7 @@ export function startWorkout({ session, plannedSession, adjustments = [], enviro
     restScale: 1,
     stepExtraSec: 0,
     results: {},
+    exerciseNotes: {},
     finishedAt: null,
   }
 }
@@ -383,6 +385,152 @@ export function endEarly(state, now) {
   return { ...s, index: s.steps.length, finishedAt: now, endedEarly: s.index < s.steps.length }
 }
 
+// ── Mid-workout notes and edits ───────────────────────────────────────────
+
+export const noteKey = (blockId, exerciseId) => `${blockId}|${exerciseId}`
+
+/** A note on one exercise of one block. Empty text removes it; blank notes are left out of the log. */
+export function setExerciseNote(state, blockId, exerciseId, text) {
+  const notes = { ...(state.exerciseNotes || {}) }
+  const k = noteKey(blockId, exerciseId)
+  if (text) notes[k] = text
+  else delete notes[k]
+  return { ...state, exerciseNotes: notes }
+}
+
+/** Exercise notes in workout order: [{ blockId, exerciseId, text }]. */
+export function listExerciseNotes(state) {
+  const notes = state.exerciseNotes || {}
+  const seen = new Set()
+  const out = []
+  for (const s of state.steps) {
+    if (!s.exerciseId) continue
+    const k = noteKey(s.blockId, s.exerciseId)
+    if (seen.has(k)) continue
+    seen.add(k)
+    if (notes[k]?.trim()) out.push({ blockId: s.blockId, exerciseId: s.exerciseId, text: notes[k].trim() })
+  }
+  return out
+}
+
+const WORK_KINDS = ['set', 'timed', 'cardio']
+
+/** The exercise a note typed now is about: the current one, or the one just finished during a rest. */
+export function noteTarget(state) {
+  const step = state.steps[state.index]
+  if (step && WORK_KINDS.includes(step.kind)) return step
+  return state.steps.slice(0, state.index).reverse().find(s => WORK_KINDS.includes(s.kind)) || null
+}
+
+/** The block's main rest timer and the plan field it lives in, or null (cardio has none). */
+export function mainRest(block) {
+  switch (block?.type) {
+    case 'cardio': return null
+    case 'hold': {
+      const holds = (block.items || []).reduce((n, it) => n + (it.sides ? 2 : 1), 0) * (block.rounds || 1)
+      return holds > 1 ? { field: 'restBetweenSec', sec: block.restBetweenSec ?? 10 } : null
+    }
+    case 'interval': return (block.rounds || 4) > 1 ? { field: 'restSec', sec: block.restSec ?? 60 } : null
+    case 'superset':
+    case 'circuit': return (block.rounds || 3) > 1 ? { field: 'restSec', sec: block.restSec ?? 90 } : null
+    default: return block?.exercises?.[0] ? { field: 'restSec', sec: block.exercises[0].restSec ?? 90 } : null
+  }
+}
+
+// Workouts started before rests were tagged: a plain "Rest" is the main rest.
+const restFieldOf = step => step.restField ?? (step.label === 'Rest' ? 'restSec' : null)
+
+/** Record a mid-workout edit, folding repeated edits of the same thing into one adjustment. */
+function noteEdit(state, adj, same) {
+  const list = [...state.adjustments]
+  const i = list.findIndex(a => a.at === 'during' && a.type === adj.type && same(a))
+  const from = i >= 0 ? list[i].from : adj.from
+  if (i >= 0) list.splice(i, 1)
+  if (String(from) !== String(adj.to)) list.push({ ...adj, from, ...(state.keepEdits ? { keep: true } : {}) })
+  return list
+}
+
+/**
+ * Change a block's main rest for the rest of this workout: every rest of that kind not yet
+ * done, including one running now. Logged as a `rest` adjustment.
+ */
+export function setBlockRest(state, blockId, sec) {
+  const block = state.session.blocks.find(b => b.id === blockId)
+  const rest = mainRest(block)
+  if (!rest || rest.sec === sec) return state
+  const session = {
+    ...state.session,
+    blocks: state.session.blocks.map(b => {
+      if (b.id !== blockId) return b
+      if (b.type === 'single') return { ...b, exercises: b.exercises.map((e, i) => (i === 0 ? { ...e, restSec: sec } : e)) }
+      return { ...b, [rest.field]: sec }
+    }),
+  }
+  const steps = state.steps.map((s, i) =>
+    i >= state.index && s.blockId === blockId && s.kind === 'rest' && restFieldOf(s) === rest.field ? { ...s, durationSec: sec } : s)
+  const exerciseId = block.type === 'single' ? block.exercises[0].exerciseId : undefined
+  const adjustments = noteEdit(state,
+    { type: 'rest', blockId, ...(exerciseId ? { exerciseId } : {}), field: rest.field, from: rest.sec, to: sec, at: 'during' },
+    a => a.blockId === blockId && a.field === rest.field)
+  return { ...state, session, steps, adjustments }
+}
+
+/**
+ * Index of the first step that may still move. Blocks with any step before it are locked
+ * (done or under way). During a transition the block being set up can still move.
+ */
+function firstMovableIndex(state) {
+  const step = state.steps[state.index]
+  if (!step) return state.steps.length
+  const from = step.kind === 'transition' ? state.index : state.index + 1
+  const locked = new Set(state.steps.slice(0, from).map(s => s.blockId))
+  let i = from
+  while (i < state.steps.length && locked.has(state.steps[i].blockId)) i++
+  return i
+}
+
+/** Ids of the blocks that haven't started yet, in workout order. */
+export function movableBlockIds(state) {
+  return [...new Set(state.steps.slice(firstMovableIndex(state)).map(s => s.blockId))]
+}
+
+/**
+ * Put the blocks that haven't started in a new order. Only steps that haven't happened move,
+ * as whole blocks with their transition, so logged results and earlier edits (dropped sets,
+ * changed rests) stay as they are. `order` lists movable block ids; unknown ids are ignored.
+ */
+export function reorderBlocks(state, order) {
+  const start = firstMovableIndex(state)
+  const movable = movableBlockIds(state)
+  const wanted = order.filter(id => movable.includes(id))
+  const next = [...wanted, ...movable.filter(id => !wanted.includes(id))]
+  if (next.join() === movable.join()) return state
+
+  const groups = new Map(next.map(id => [id, []]))
+  for (const s of state.steps.slice(start)) groups.get(s.blockId).push(s)
+  const oldOrder = state.session.blocks.map(b => b.id)
+  const blocks = [
+    ...state.session.blocks.filter(b => !movable.includes(b.id)),
+    ...next.map(id => state.session.blocks.find(b => b.id === id)).filter(Boolean),
+  ]
+  const indexOf = new Map(blocks.map((b, i) => [b.id, i]))
+  const steps = [...state.steps.slice(0, start), ...next.flatMap(id => groups.get(id))]
+    .map(s => (indexOf.has(s.blockId) && indexOf.get(s.blockId) !== s.blockIndex ? { ...s, blockIndex: indexOf.get(s.blockId) } : s))
+  const newOrder = blocks.map(b => b.id)
+  const adjustments = noteEdit(state, { type: 'reorder', from: oldOrder, to: newOrder, at: 'during' }, () => true)
+  return { ...state, session: { ...state.session, blocks }, steps, adjustments }
+}
+
+/** Mark this workout's mid-workout edits as "keep for future sessions" (the coach updates the plan). */
+export function setKeepEdits(state, keep) {
+  const adjustments = state.adjustments.map(a => {
+    if (a.at !== 'during' || (a.type !== 'rest' && a.type !== 'reorder')) return a
+    const rest = Object.fromEntries(Object.entries(a).filter(([k]) => k !== 'keep'))
+    return keep ? { ...rest, keep: true } : rest
+  })
+  return { ...state, keepEdits: keep, adjustments }
+}
+
 // ── Records & history ─────────────────────────────────────────────────────
 
 /** Epley estimate of one-rep max. */
@@ -442,6 +590,7 @@ export function buildWorkoutRecord(state, { sessionRpe = null, note = '' } = {})
     endedEarly: !!state.endedEarly,
     sessionRpe,
     note,
+    exerciseNotes: listExerciseNotes(state),
     adjustments: state.adjustments,
     blocks: blocks.filter(b => b.exercises.length || b.timed.length || b.cardio),
   }

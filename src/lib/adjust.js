@@ -152,18 +152,28 @@ export function diffSession(original, edited, { fromEnv, toEnv } = {}) {
 }
 
 export function describeAdjustment(a) {
+  const text = describe(a)
+  return a.keep ? `${text} (keep for future sessions)` : text
+}
+
+const fmtSec = s => (s == null ? '—' : s >= 60 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : `${s}s`)
+
+function describe(a) {
   const name = id => getExercise(id).name
   switch (a.type) {
     case 'swap': return `Swapped ${name(a.from)} → ${name(a.to)}`
     case 'remove': return `Removed ${a.exerciseIds.map(name).join(', ')}`
     case 'add': return `Added ${a.exerciseIds.map(name).join(', ')}`
-    case 'reorder': return 'Changed the order'
+    case 'reorder': return a.at === 'during' ? 'Changed the block order mid-workout' : 'Changed the order'
+    case 'rest':
+      if (a.at !== 'during') break
+      return `${a.field === 'restBetweenSec' ? 'Rest between moves' : 'Rest'}${a.exerciseId ? ` for ${name(a.exerciseId)}` : ''}: ${fmtSec(a.from)} → ${fmtSec(a.to)} mid-workout`
     case 'environment': return `Switched location ${a.from} → ${a.to}`
     case 'shorten-rests': return 'Shortened rests mid-workout'
     case 'drop-set': return `Dropped set ${a.setNo} of ${name(a.exerciseId)}`
     case 'skip': return a.kind === 'set'
       ? `Skipped set ${a.setNo} of ${name(a.exerciseId)}`
       : `Skipped ${name(a.exerciseId)}${a.side ? ` (${a.side.toLowerCase()} side)` : ''}${a.kind === 'timed' && a.setNo ? `, round ${a.setNo}` : ''}`
-    default: return `${a.exerciseId ? name(a.exerciseId) + ' ' : ''}${a.field}: ${a.from ?? '—'} → ${a.to ?? '—'}`
   }
+  return `${a.exerciseId ? name(a.exerciseId) + ' ' : ''}${a.field}: ${a.from ?? '—'} → ${a.to ?? '—'}`
 }

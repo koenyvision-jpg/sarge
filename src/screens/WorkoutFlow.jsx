@@ -5,11 +5,13 @@ import { cues, say, unlockAudio } from '../lib/audio.js'
 import { formatClock, formatDuration } from '../lib/dates.js'
 import {
   NAG_EVERY_SEC, adjustStep, advance, autoAdvances, catchUp, currentStepDuration, dropLastSet, endEarly, goBack, restartStep, skipStep,
-  lastDroppableSetIndex, lastPerformance, overrunSec, pace, pause, resume, shortenRests, stepElapsedSec, summarizeSets,
+  lastDroppableSetIndex, lastPerformance, noteKey, noteTarget, overrunSec, pace, pause, resume, setExerciseNote, shortenRests,
+  stepElapsedSec, summarizeSets,
 } from '../lib/engine.js'
 import { getExercise, loadStep, usesLoad } from '../lib/exercises.js'
 import { Sheet, Stepper } from '../components/ui.jsx'
 import WorkoutSummary from './WorkoutSummary.jsx'
+import WorkoutOverview from './WorkoutOverview.jsx'
 import { ExerciseInfoButton } from '../components/ExerciseInfo.jsx'
 
 const BEHIND_PROMPT_SEC = 180
@@ -19,6 +21,8 @@ export default function WorkoutFlow({ onMinimize, onDone }) {
   const now = useNow(250, !!w && !w.finishedAt)
   const fired = useRef(new Set())
   const [menu, setMenu] = useState(false)
+  const [overview, setOverview] = useState(false)
+  const [noteEdit, setNoteEdit] = useState(null)
   const [dismissedBehind, setDismissedBehind] = useState(0)
   useWakeLock(!!w && !w.finishedAt)
 
@@ -97,6 +101,8 @@ export default function WorkoutFlow({ onMinimize, onDone }) {
   const canDrop = lastDroppableSetIndex(w) >= 0
   const nextWork = w.steps.slice(w.index + 1).find(s => s.kind !== 'rest' && s.kind !== 'transition')
 
+  const note = <NoteButton w={w} onOpen={(target, text) => setNoteEdit({ target, text, had: !!text })} />
+
   const tone = w.pausedAt ? '' : step.kind === 'set' && over > 0 ? 'over' : step.kind === 'rest' || step.kind === 'transition' ? 'rest' : step.kind === 'timed' ? 'timed' : ''
 
   return (
@@ -108,7 +114,14 @@ export default function WorkoutFlow({ onMinimize, onDone }) {
             <div className="tiny faint" style={{ letterSpacing: 1, textTransform: 'uppercase' }}>Block {step.blockIndex + 1} of {blockCount}</div>
             <div className="ellipsis small">{w.name}</div>
           </div>
-          <button className="icon-btn" onClick={() => setMenu(true)} aria-label="Workout menu">⋯</button>
+          <div className="row" style={{ gap: 8 }}>
+            <button className="icon-btn" onClick={() => setOverview(true)} aria-label="Whole workout">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+                <path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01" />
+              </svg>
+            </button>
+            <button className="icon-btn" onClick={() => setMenu(true)} aria-label="Workout menu">⋯</button>
+          </div>
         </div>
 
         <PaceBar p={p} pausedAt={w.pausedAt} />
@@ -129,13 +142,13 @@ export default function WorkoutFlow({ onMinimize, onDone }) {
         <div className="flow-main">
           {w.pausedAt && <div className="paused-pill">Paused · {formatDuration((now - w.pausedAt) / 1000)}</div>}
           {step.kind === 'set' ? (
-            <SetView key={step.id} w={w} step={step} elapsed={elapsed} over={over} records={records} onDone={done} />
+            <SetView key={step.id} w={w} step={step} elapsed={elapsed} over={over} records={records} onDone={done} note={note} />
           ) : step.kind === 'rest' || step.kind === 'transition' ? (
-            <RestView step={step} remaining={remaining} total={total} next={nextWork} w={w} records={records} />
+            <RestView step={step} remaining={remaining} total={total} next={nextWork} w={w} records={records} note={note} />
           ) : step.kind === 'timed' ? (
-            <TimedView step={step} remaining={remaining} total={total} />
+            <TimedView step={step} remaining={remaining} total={total} note={note} />
           ) : (
-            <CardioView key={step.id} step={step} label={w.session.blocks.find(b => b.id === step.blockId)?.label} elapsed={elapsed} total={total} onDone={done} />
+            <CardioView key={step.id} step={step} label={w.session.blocks.find(b => b.id === step.blockId)?.label} elapsed={elapsed} total={total} onDone={done} note={note} />
           )}
         </div>
         <TimerControls countdown={step.kind !== 'set'} paused={!!w.pausedAt} remaining={total - elapsed}
@@ -152,7 +165,50 @@ export default function WorkoutFlow({ onMinimize, onDone }) {
           <button className="btn danger block" onClick={() => { update(endEarly(w, Date.now())); setMenu(false) }}>End workout now</button>
         </div>
       </Sheet>
+
+      <Sheet open={overview} onClose={() => setOverview(false)}>
+        {overview && <WorkoutOverview w={w} update={update} />}
+      </Sheet>
+      <NoteSheet edit={noteEdit} setEdit={setNoteEdit}
+        onSave={(target, text) => update(setExerciseNote(w, target.blockId, target.exerciseId, text))} />
     </div>
+  )
+}
+
+/** Chip for a quick note on the exercise you're doing, or the one you just finished while resting. */
+function NoteButton({ w, onOpen }) {
+  const target = noteTarget(w)
+  if (!target) return null
+  const text = w.exerciseNotes?.[noteKey(target.blockId, target.exerciseId)] || ''
+  const current = w.steps[w.index] === target
+  return (
+    <button type="button" className={`chip note-chip${text ? ' on' : ''}`} onClick={() => onOpen(target, text)}>
+      <span aria-hidden="true">✎</span>
+      <span className="ellipsis">{text || (current ? 'Add note' : `Note on ${getExercise(target.exerciseId).name}`)}</span>
+    </button>
+  )
+}
+
+/** Editor for one exercise note. Lives above the step views, so a rest running out doesn't close it. */
+function NoteSheet({ edit, setEdit, onSave }) {
+  const save = () => { onSave(edit.target, edit.text.trim()); setEdit(null) }
+  return (
+    <Sheet open={!!edit} onClose={save}>
+      {edit && (
+        <div className="stack">
+          <div>
+            <h2>Note: {getExercise(edit.target.exerciseId).name}</h2>
+            <div className="small muted">Pain, form, weight choice — the coach reads it.</div>
+          </div>
+          <textarea autoFocus rows={3} value={edit.text} onChange={e => setEdit({ ...edit, text: e.target.value })}
+            placeholder="e.g. Left knee cranky on the way down" />
+          <div className="row">
+            {edit.had && <button className="btn ghost" onClick={() => { onSave(edit.target, ''); setEdit(null) }}>Delete</button>}
+            <button className="btn primary grow" onClick={save}>Save note</button>
+          </div>
+        </div>
+      )}
+    </Sheet>
   )
 }
 
@@ -203,7 +259,7 @@ function initialValues(w, step, records) {
   }
 }
 
-function SetView({ w, step, elapsed, over, records, onDone }) {
+function SetView({ w, step, elapsed, over, records, onDone, note }) {
   const [vals, setVals] = useState(() => initialValues(w, step, records))
   const weighted = usesLoad(step.exerciseId) || step.target.load
   const last = lastPerformance(step.exerciseId, records)
@@ -227,6 +283,7 @@ function SetView({ w, step, elapsed, over, records, onDone }) {
         </div>
         {last && <div className="flow-last">Last time: {summarizeSets(last.sets)}</div>}
         <SetDots step={step} />
+        <div className="note-slot">{note}</div>
       </div>
 
       <div className="log-grid">
@@ -292,7 +349,7 @@ function NextCard({ next, w, records }) {
   )
 }
 
-function RestView({ step, remaining, total, next, w, records }) {
+function RestView({ step, remaining, total, next, w, records, note }) {
   const warn = remaining <= 10
   return (
     <>
@@ -302,17 +359,19 @@ function RestView({ step, remaining, total, next, w, records }) {
         <div className="tiny faint">of {formatDuration(total)}</div>
       </Ring>
       <NextCard next={next} w={w} records={records} />
+      <div className="note-slot">{note}</div>
     </>
   )
 }
 
-function TimedView({ step, remaining, total }) {
+function TimedView({ step, remaining, total, note }) {
   return (
     <>
       <div className="stack tight">
         <div className="flow-kicker">{step.setsTotal > 1 ? `Round ${step.setNo} of ${step.setsTotal}` : 'Hold'}{step.side ? ` · ${step.side}` : ''}</div>
         <div className="flow-name">{step.label}<ExerciseInfoButton exerciseId={step.exerciseId} size="lg" /></div>
         <div className="flow-target">{step.target}</div>
+        <div className="note-slot">{note}</div>
       </div>
       <Ring fraction={remaining / total} color="var(--accent)">
         <div className="flow-timer small tnum">{formatDuration(Math.ceil(remaining))}</div>
@@ -321,7 +380,7 @@ function TimedView({ step, remaining, total }) {
   )
 }
 
-function CardioView({ step, label, elapsed, total, onDone }) {
+function CardioView({ step, label, elapsed, total, onDone, note }) {
   const [distance, setDistance] = useState('')
   const [hr, setHr] = useState('')
   const left = total - elapsed
@@ -331,6 +390,7 @@ function CardioView({ step, label, elapsed, total, onDone }) {
         <div className="flow-kicker">{label || 'Cardio'} · {Math.round(total / 60)} min</div>
         <div className="flow-name">{getExercise(step.exerciseId).name}<ExerciseInfoButton exerciseId={step.exerciseId} size="lg" /></div>
         {step.target && <div className="flow-target">{step.target}</div>}
+        <div className="note-slot">{note}</div>
       </div>
       <div className={`flow-timer tnum`} style={{ color: left <= 0 ? 'var(--good)' : undefined }}>
         {left > 0 ? formatDuration(Math.ceil(left)) : `+${formatDuration(-left)}`}

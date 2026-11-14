@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useStore } from '../lib/store.jsx'
 import { formatDuration } from '../lib/dates.js'
-import { buildWorkoutRecord, estimateByBlock, findPRs } from '../lib/engine.js'
+import { buildWorkoutRecord, estimateByBlock, findPRs, listExerciseNotes, noteKey, setExerciseNote } from '../lib/engine.js'
 import { describeAdjustment } from '../lib/adjust.js'
 import { toast } from '../components/ui.jsx'
 import { ExerciseName } from '../components/ExerciseInfo.jsx'
@@ -23,6 +23,9 @@ export default function WorkoutSummary({ workout, onDone }) {
   const prs = useMemo(() => findPRs(base, records), [base, records])
   const planned = useMemo(() => estimateByBlock(workout.session), [workout.session])
   const overPlan = base.actualSec - base.plannedSec
+  // Fixed when the summary opens, so clearing a note to retype it doesn't make the box vanish.
+  const [exNotes] = useState(() => listExerciseNotes(workout))
+  const editNote = (n, text) => set({ activeWorkout: setExerciseNote(workout, n.blockId, n.exerciseId, text) })
 
   const save = () => {
     addRecord({ ...base, sessionRpe: rpe, note: note.trim(), prs }, `Sarge: workout ${base.date} — ${base.name}`)
@@ -109,6 +112,21 @@ export default function WorkoutSummary({ workout, onDone }) {
               <button key={n} className={`chip${rpe === n ? ' on' : ''}`} onClick={() => setRpe(n)} style={{ minWidth: 44, justifyContent: 'center' }}>{n}</button>
             ))}
           </div>
+          {exNotes.length > 0 && (
+            <>
+              <div className="section-title">Exercise notes</div>
+              <div className="stack tight">
+                {exNotes.map(n => (
+                  <div key={noteKey(n.blockId, n.exerciseId)} className="stack tight" style={{ gap: 4 }}>
+                    <ExerciseName exerciseId={n.exerciseId} className="small bold" />
+                    <textarea rows={2} style={{ minHeight: 0 }} value={workout.exerciseNotes?.[noteKey(n.blockId, n.exerciseId)] ?? ''}
+                      onChange={e => editNote(n, e.target.value)} aria-label="Exercise note" />
+                  </div>
+                ))}
+              </div>
+              <div className="section-title">Overall notes</div>
+            </>
+          )}
           <textarea placeholder="Notes for the coach — pain, form, how it felt" value={note} onChange={e => setNote(e.target.value)} />
         </div>
 

@@ -433,3 +433,16 @@ a.btn { text-decoration: none; }
 .run-fields input { min-width: 0; width: 100%; }
 .check-row { cursor: pointer; }
 .check-row input[type=checkbox] { width: 22px; height: 22px; flex: none; accent-color: var(--accent); margin: 0; }
+
+/* Mid-workout notes and the whole-workout sheet */
+.note-slot { display: flex; justify-content: center; min-width: 0; }
+.note-chip { max-width: 100%; min-width: 0; }
+.ov-list { overflow: visible; }
+.ov-row { align-items: flex-start; background: var(--surface); position: relative; }
+.ov-row:first-child { border-radius: var(--r-lg) var(--r-lg) 0 0; }
+.ov-row:last-child { border-radius: 0 0 var(--r-lg) var(--r-lg); }
+.ov-row.done { opacity: 0.6; }
+.ov-row.dragging { z-index: 2; background: var(--surface-2); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45); border-radius: var(--r-md); }
+.ov-num { width: 28px; flex: none; text-align: center; color: var(--text-3); font-weight: 750; padding-top: 2px; }
+.drag-handle { width: 28px; height: 28px; flex: none; display: inline-flex; align-items: center; justify-content: center; color: var(--text-3); touch-action: none; cursor: grab; }
+.dragging .drag-handle { cursor: grabbing; color: var(--accent); }

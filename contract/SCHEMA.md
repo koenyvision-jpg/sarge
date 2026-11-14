@@ -134,6 +134,7 @@ Equipment ids: barbell, rack, bench, dumbbells, kettlebell, cable, machine, pull
   "plannedSec": 3480, "actualSec": 3900, "pausedSec": 0,
   "overSec": 240,            // total time over plan: slow sets + rests extended
   "endedEarly": false, "sessionRpe": 8, "note": "Left knee a bit cranky on last set",
+  "exerciseNotes": [ { "blockId": "b1", "exerciseId": "back-squat", "text": "Knee caved on set 3, dropped 5 kg" } ],
   "adjustments": [ { "type": "swap", "blockId": "b2", "from": "rdl", "to": "db-rdl", "at": "before" } ],
   "blocks": [ { "blockId": "b1", "type": "single", "title": "Back squat", "actualSec": 960,
     "exercises": [ { "exerciseId": "back-squat", "sets": [ { "reps": 5, "load": 100 } ] } ],   // per-side sets add "side": "Left" | "Right"
@@ -144,6 +145,15 @@ Adjustment types: `swap`, `sets`, `reps`, `load`, `rest`, `remove`, `add`, `reor
 `{ "type": "skip", "kind": "set", "exerciseId": "rdl", "setNo": 3, "at": "during" }`; a per-side set adds `"side"`).
 `at` is `before` (in the session overview) or `during` (in the workout). Timers can also be shortened or extended
 mid-workout; time added shows up in `overSec` / `restOverSec`.
+Mid-workout the user can also change a block's rest (`{ "type": "rest", "blockId": "b1", "exerciseId": "back-squat",
+"field": "restSec", "from": 180, "to": 150, "at": "during" }`; `field` is `restSec` or `restBetweenSec`) and reorder
+blocks that hadn't started (`{ "type": "reorder", "from": [...block ids], "to": [...block ids], "at": "during" }`).
+These apply to that workout only. **`"keep": true` on a `rest` or `reorder` adjustment is a request**: the user wants the
+change in future sessions of this kind. Apply it when you next write `plan/current.json` (or say why not) and mention it in the debrief.
+
+**`exerciseNotes`** (optional) — notes the user typed on a specific exercise during the workout, in workout order.
+They're about that exercise in that block: pain, form, weight choice, equipment. `note` stays the overall note for the session.
+Read both; a note naming pain is a safety signal, and the same complaint on the same lift across sessions is a pattern.
 Patterns in adjustments (always cutting the same set, always swapping the same lift) are worth calling out.
 
 **Runs done outside the app.** On a session with a `cardio` block the user can log it without the workout flow.

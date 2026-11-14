@@ -132,6 +132,9 @@ export default function ProgressPage() {
                 ))}
                 {b.cardio && <div className="small muted">{formatDuration(b.cardio.durationSec)}{b.cardio.distanceKm ? ` · ${b.cardio.distanceKm} km · ${paceText(b.cardio.durationSec / b.cardio.distanceKm)} /km` : ''}{b.cardio.avgHr ? ` · ${b.cardio.avgHr} bpm` : ''}</div>}
                 {b.timed?.length > 0 && <div className="small muted">{b.timed.filter(t => t.completed).length}/{b.timed.length} intervals/holds done</div>}
+                {(open.exerciseNotes || []).filter(n => n.blockId === b.blockId).map(n => (
+                  <div key={n.exerciseId} className="small">✎ <ExerciseName exerciseId={n.exerciseId} className="muted" suffix=":" /> “{n.text}”</div>
+                ))}
               </div>
             ))}
             {open.adjustments?.length > 0 && (
